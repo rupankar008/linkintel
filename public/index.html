@@ -13,6 +13,32 @@
 
 <canvas id="matrixCanvas" class="matrix-canvas"></canvas>
 
+<!-- GLOBAL DISCLAIMER -->
+<div style="position: fixed; bottom: 0; left: 0; width: 100%; padding: 8px; background: rgba(0,0,0,0.8); color: var(--text2); font-size: 0.65rem; text-align: center; z-index: 9999; border-top: 1px solid rgba(255,255,255,0.05); text-transform: uppercase; letter-spacing: 1px;">
+  Disclaimer: This tool is strictly for educational and authorized testing purposes only. We are not responsible for any misuse. All rights reserved.
+</div>
+
+<!-- PRIVACY POLICY MODAL -->
+<div id="privacyModal" style="display:none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index: 10000; align-items: center; justify-content: center;">
+  <div class="glass" style="max-width: 500px; width: 90%; padding: 2rem; border-radius: 12px; border-left: 4px solid var(--accent-primary);">
+    <h2 style="color: var(--accent-primary); margin-bottom: 1rem;">Privacy Policy & Terms of Use</h2>
+    <div style="font-size: 0.85rem; color: var(--text2); max-height: 200px; overflow-y: auto; margin-bottom: 1.5rem; padding-right: 10px; line-height: 1.5;">
+      <p>By using LinkIntel, you agree to the following terms:</p>
+      <ul style="margin-left: 1rem; margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem;">
+        <li>This service is for educational and authorized use only.</li>
+        <li>You will not use this service for malicious, illegal, or unauthorized activities.</li>
+        <li>The administrators reserve the right to ban any user or delete any data at their sole discretion.</li>
+        <li>We are not responsible for any consequences arising from the use of this service.</li>
+        <li>Your operator ID, IP address, and usage activity may be monitored by administrators to prevent abuse.</li>
+      </ul>
+    </div>
+    <div style="display: flex; gap: 1rem;">
+      <button class="btn-primary" style="flex: 1;" onclick="acceptTerms()">Accept & Continue</button>
+      <button class="btn-sm danger" style="flex: 1;" onclick="declineTerms()">Decline</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════════════════════ AUTH SCREEN ════════════════════════════ -->
 <div id="authScreen" class="auth-screen">
   <div class="auth-bg">
@@ -325,8 +351,13 @@ async function doLogin() {
     const d = await r.json();
     if (!r.ok) return (err.textContent = d.error);
     session = { userId: d.userId, username: d.username, isAdmin: d.isAdmin, adminToken: d.adminToken };
-    localStorage.setItem('li_session', JSON.stringify(session));
-    bootApp();
+    
+    if (d.hasAcceptedTerms) {
+      localStorage.setItem('li_session', JSON.stringify(session));
+      bootApp();
+    } else {
+      document.getElementById('privacyModal').style.display = 'flex';
+    }
   } catch { err.textContent = 'Connection error'; }
 }
 
@@ -340,9 +371,43 @@ async function doRegister() {
     const d = await r.json();
     if (!r.ok) return (err.textContent = d.error);
     session = { userId: d.userId, username: d.username, isAdmin: d.isAdmin };
+    
+    // Always show terms modal on new registration
+    document.getElementById('privacyModal').style.display = 'flex';
+  } catch { err.textContent = 'Connection error'; }
+}
+
+async function acceptTerms() {
+  if (!session) return;
+  try {
+    await fetch('/api/accept-terms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: session.userId }) });
+    document.getElementById('privacyModal').style.display = 'none';
     localStorage.setItem('li_session', JSON.stringify(session));
     bootApp();
-  } catch { err.textContent = 'Connection error'; }
+  } catch { alert('Failed to accept terms'); }
+}
+
+function declineTerms() {
+  document.getElementById('privacyModal').style.display = 'none';
+  session = null;
+  localStorage.removeItem('li_session');
+  
+  // Show decline block message
+  const authEl = document.getElementById('authScreen');
+  const existing = document.getElementById('bannedNotice');
+  if (existing) existing.remove();
+  
+  const notice = document.createElement('div');
+  notice.id = 'bannedNotice';
+  notice.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; padding: 1rem;
+    background: rgba(220,38,38,0.95); color: #fff; font-weight: 700;
+    font-size: 0.9rem; text-align: center; z-index: 99999;
+    border-bottom: 2px solid #ff0000; letter-spacing: 0.5px;
+    box-shadow: 0 0 30px rgba(255,0,0,0.5);
+  `;
+  notice.innerHTML = '⛔ You cannot access the services of this website because you declined our privacy policy. To use, create a new ID and accept the privacy policy.';
+  document.body.prepend(notice);
 }
 
 async function triggerTrap() {

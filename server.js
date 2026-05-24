@@ -32,6 +32,7 @@ const userSchema = new mongoose.Schema({
   isAdmin: { type: Boolean, default: false },
   adminToken: { type: String },
   isBanned: { type: Boolean, default: false },
+  hasAcceptedTerms: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
 });
 const User = mongoose.model('User', userSchema);
@@ -272,7 +273,7 @@ app.post('/api/login', async (req, res) => {
       await user.save();
     }
 
-    const responseData = { success: true, userId: user.id, username, isAdmin: !!user.isAdmin };
+    const responseData = { success: true, userId: user.id, username, isAdmin: !!user.isAdmin, hasAcceptedTerms: !!user.hasAcceptedTerms };
     if (user.isAdmin) responseData.adminToken = user.adminToken;
     res.json(responseData);
   } catch (err) {
@@ -300,12 +301,22 @@ app.post('/api/register', async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 10);
     const id = 'uid_' + uuidv4().replace(/-/g,'').slice(0,12);
 
-    const newUser = new User({ username, passwordHash, plainPassword: password, id, isAdmin: false });
+    const newUser = new User({ username, passwordHash, plainPassword: password, id, isAdmin: false, hasAcceptedTerms: false });
     await newUser.save();
 
-    res.json({ success: true, userId: id, username, isAdmin: false });
+    res.json({ success: true, userId: id, username, isAdmin: false, hasAcceptedTerms: false });
   } catch (err) {
     console.error('[REGISTER ERROR]', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/accept-terms', async (req, res) => {
+  try {
+    const { userId } = req.body;
+    await User.updateOne({ id: userId }, { hasAcceptedTerms: true });
+    res.json({ success: true });
+  } catch (err) {
     res.status(500).json({ error: 'Server error' });
   }
 });
