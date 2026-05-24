@@ -340,109 +340,141 @@ h1, h2, h3, h4, .brand-name { font-family: var(--font-sans); text-transform: upp
 
 
 /* ══════════════════════════════════════════════════════
-   MOBILE RESPONSIVE — PHONES (≤ 768px)
+   MOBILE RESPONSIVE — PREMIUM APP LAYOUT (≤ 768px)
 ══════════════════════════════════════════════════════ */
 @media (max-width: 768px) {
-
   html, body { overflow: auto; height: auto; }
 
-  /* ─── App Layout: Standard document flow on mobile ─── */
+  /* ─── App Layout: Standard document flow ─── */
   .app-screen {
     display: block;
     height: auto;
     overflow: visible;
+    padding-bottom: calc(70px + env(safe-area-inset-bottom, 15px)); /* Space for bottom tab bar */
   }
 
-  /* ─── Sidebar becomes sticky top nav bar ─── */
+  /* ─── Sidebar becomes Bottom Tab Bar ─── */
   .sidebar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
     width: 100%;
-    position: sticky;
-    top: 0;
-    z-index: 999;
-    background: var(--cyber-bg);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border-right: none;
-    border-bottom: 1px solid var(--cyber-border);
-    padding: env(safe-area-inset-top, 0.5rem) 0.5rem 0.5rem 0.5rem;
+    z-index: 9999;
     flex-direction: column;
+    padding: 0;
+    border: none;
+    border-top: 1px solid rgba(0, 255, 65, 0.2);
+    background: rgba(5, 10, 10, 0.85);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
     height: auto;
-    min-height: auto;
   }
 
   .sidebar-brand { display: none; }
   .sidebar-footer { display: none; }
-  .mobile-logout-btn { display: flex !important; }
   .sidebar::before { content: none; }
+  .mobile-logout-btn { display: flex !important; }
 
+  /* ─── Premium Tab Nav ─── */
   .sidebar-nav {
     display: flex;
     flex-direction: row;
-    overflow-x: auto;
-    gap: 0.5rem;
+    justify-content: space-around;
+    align-items: center;
     width: 100%;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    padding-bottom: 0;
+    padding: 0.5rem 0.5rem env(safe-area-inset-bottom, 10px) 0.5rem;
+    overflow: visible;
+    gap: 0;
   }
-  .sidebar-nav::-webkit-scrollbar { display: none; }
 
   .nav-btn {
-    padding: 0.75rem 1rem;
-    font-size: 0.85rem;
-    gap: 0.5rem;
-    white-space: nowrap;
-    border: 1px solid var(--cyber-border);
-    border-radius: 4px;
-    background: rgba(0,0,0,0.5);
-    flex: 1 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     justify-content: center;
+    gap: 0.25rem;
+    padding: 0.5rem;
+    border: none !important;
+    background: transparent !important;
+    color: var(--text-muted);
+    min-height: auto;
+    flex: 1;
+    border-radius: 8px;
   }
-  .nav-btn.active {
-    background: rgba(0, 255, 65, 0.2);
+  
+  .nav-btn .nav-icon { 
+    font-size: 1.3rem; 
+    margin-bottom: 2px;
+    transition: all 0.3s ease;
   }
-  .nav-btn .nav-icon { font-size: 1.1rem; }
+  
+  .nav-btn span:not(.nav-icon) {
+    font-size: 0.65rem;
+    font-family: var(--font-sans);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    display: block !important; /* Force text to show */
+  }
 
-  /* ─── Main content fills remaining space ─── */
+  .nav-btn.active {
+    color: var(--accent-primary);
+    text-shadow: 0 0 10px var(--accent-glow);
+  }
+  .nav-btn.active .nav-icon {
+    transform: translateY(-2px);
+    filter: drop-shadow(0 0 8px var(--accent-primary));
+  }
+
+  /* ─── Main Content ─── */
   .main-content {
     display: block;
-    padding: 1rem;
+    padding: 1.25rem 1rem;
     overflow: visible;
     height: auto;
   }
 
   /* ─── Page Header ─── */
-  .page-header { margin-bottom: 1.25rem; }
-  .page-header h2 { font-size: 1.3rem; letter-spacing: 1px; }
-  .page-header p { font-size: 0.75rem; }
+  .page-header { margin-bottom: 1.5rem; border-left: 3px solid var(--accent-primary); padding-left: 0.75rem; }
+  .page-header h2 { font-size: 1.4rem; letter-spacing: 1px; }
+  .page-header p { font-size: 0.8rem; color: #888; }
 
-  /* ─── Stats Grid: 2 columns ─── */
+  /* ─── Stats Grid ─── */
   .stats-grid {
     grid-template-columns: 1fr 1fr;
-    gap: 0.75rem;
-    margin-bottom: 1.5rem;
+    gap: 1rem;
+    margin-bottom: 2rem;
   }
-  .stat-card { padding: 1rem; }
+  .stat-card { 
+    padding: 1.25rem 1rem; 
+    border-radius: 12px;
+    background: rgba(0, 20, 10, 0.4);
+    border: 1px solid rgba(0, 255, 65, 0.15);
+    align-items: center;
+    text-align: center;
+  }
   .stat-val { font-size: 1.8rem; }
-  .stat-icon { font-size: 1.2rem; margin-bottom: 0.5rem; }
-  .stat-label { font-size: 0.65rem; }
+  .stat-icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
+  .stat-label { font-size: 0.7rem; font-weight: 600; }
 
-  /* ─── Link Rows: Stack vertically ─── */
+  /* ─── Link Rows (Premium Cards) ─── */
   .link-row {
     flex-direction: column;
     align-items: stretch;
-    gap: 0.75rem;
-    padding: 1rem;
+    gap: 1rem;
+    padding: 1.25rem;
+    border-radius: 12px;
+    background: rgba(0, 20, 10, 0.3);
+    border: 1px solid rgba(0, 255, 65, 0.1);
   }
   .link-row-info { min-width: 0; }
-  .link-row-label { font-size: 1rem; }
-  .link-row-url a { font-size: 0.75rem; }
-  .link-row-dest { font-size: 0.7rem; }
+  .link-row-label { font-size: 1.1rem; }
+  .link-row-url a { font-size: 0.8rem; display: inline-block; margin-top: 4px; }
+  .link-row-dest { font-size: 0.75rem; color: #666; margin-top: 4px; }
 
   .link-row-meta {
     flex-direction: row;
     align-items: center;
-    gap: 0.75rem;
+    justify-content: space-between;
   }
 
   .link-row-actions {
@@ -450,95 +482,110 @@ h1, h2, h3, h4, .brand-name { font-family: var(--font-sans); text-transform: upp
     grid-template-columns: 1fr 1fr 1fr;
     gap: 0.5rem;
     width: 100%;
+    margin-top: 0.5rem;
   }
   .btn-sm {
-    padding: 0.55rem 0.5rem;
-    font-size: 0.7rem;
+    padding: 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
     text-align: center;
-    min-height: 38px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.05);
   }
 
   /* ─── Create Link Card ─── */
-  .create-card { padding: 1.25rem; gap: 1.25rem; }
-  .collect-grid { grid-template-columns: 1fr 1fr; gap: 0.5rem; }
-  .collect-item { font-size: 0.75rem; padding: 0.4rem; }
-  .link-box { flex-direction: column; gap: 0.75rem; }
-  .link-box span { font-size: 0.8rem; }
-  .link-box button { width: 100%; text-align: center; padding: 0.65rem; }
+  .create-card { 
+    padding: 1.5rem; 
+    gap: 1.25rem; 
+    border-radius: 12px;
+  }
+  .collect-grid { grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+  .collect-item { 
+    font-size: 0.8rem; 
+    padding: 0.6rem; 
+    border-radius: 8px;
+    border: 1px solid rgba(0, 255, 65, 0.2);
+  }
+  
+  .input-group input {
+    border-radius: 8px;
+    padding: 0.9rem;
+    font-size: 1rem;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(0,0,0,0.3);
+  }
+  .btn-primary {
+    border-radius: 8px;
+    padding: 1rem;
+    font-size: 1rem;
+  }
 
-  /* ─── Captures Layout: Stack vertically ─── */
+  .link-box { flex-direction: column; gap: 0.75rem; border-radius: 8px; }
+  .link-box span { font-size: 0.85rem; }
+  .link-box button { width: 100%; padding: 0.8rem; border-radius: 6px; }
+
+  /* ─── Captures Layout ─── */
   .captures-layout {
     flex-direction: column;
     height: auto;
-    gap: 1rem;
+    gap: 1.5rem;
     display: flex;
   }
   .captures-sidebar {
     width: 100%;
-    max-height: none;
-    overflow: visible;
-    border-bottom: 1px dashed var(--cyber-border);
+    max-height: 250px;
+    overflow-y: auto;
+    border: 1px solid var(--cyber-border);
+    border-radius: 12px;
+    background: rgba(0,0,0,0.5);
   }
-  .cap-link-item { padding: 0.75rem; }
-  .cap-link-label { font-size: 0.9rem; }
+  .cap-link-item { padding: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05); }
   .captures-main { padding-right: 0; display: block; overflow: visible; height: auto; }
 
   /* ─── Capture Cards ─── */
-  .capture-card { padding: 1rem; }
-  .capture-header { flex-direction: column; align-items: flex-start; gap: 0.3rem; }
-  .capture-grid { grid-template-columns: 1fr; gap: 0.75rem; }
-  .cap-section { padding: 0.75rem; }
-  .cap-label { font-size: 0.7rem; }
-  .cap-val { font-size: 0.85rem; }
-  .cam-photo { max-width: 100%; }
+  .capture-card { padding: 1.25rem; border-radius: 12px; }
+  .capture-header { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+  .capture-grid { grid-template-columns: 1fr; gap: 1rem; }
+  .cap-section { padding: 1rem; border-radius: 8px; }
+  .cap-label { font-size: 0.75rem; }
+  .cap-val { font-size: 0.9rem; }
+  .cam-photo { max-width: 100%; border-radius: 8px; }
 
   /* ─── Auth Screen ─── */
-  .auth-card { padding: 1.5rem; gap: 1.5rem; max-width: 100%; }
-  .brand-name { font-size: 1.8rem; }
-  .brand-icon { font-size: 2rem; }
-  .brand-sub { font-size: 0.7rem !important; }
-  .tab-btn { font-size: 0.8rem; padding: 0.6rem 0.5rem; }
-  .input-group input { font-size: 0.95rem; padding: 0.7rem; }
-  .btn-primary { font-size: 0.95rem; padding: 0.85rem; }
-
-  /* ─── God Mode / Global View ─── */
-  .empty-state { padding: 2rem 1rem; font-size: 0.8rem; }
+  .auth-screen { padding: 1rem; }
+  .auth-card { padding: 2rem 1.5rem; gap: 1.5rem; max-width: 100%; border-radius: 16px; }
+  .brand-name { font-size: 2rem; }
+  .brand-icon { font-size: 2.5rem; }
+  .tab-btn { font-size: 0.9rem; padding: 0.8rem 0.5rem; }
 }
-
 
 /* ══════════════════════════════════════════════════════
    VERY SMALL PHONES (≤ 400px)
 ══════════════════════════════════════════════════════ */
 @media (max-width: 400px) {
-  .stats-grid { grid-template-columns: 1fr; gap: 0.5rem; }
-  .stat-card { padding: 0.75rem; flex-direction: row; align-items: center; gap: 1rem; }
-  .stat-icon { margin-bottom: 0; font-size: 1.5rem; }
+  .stats-grid { grid-template-columns: 1fr; gap: 0.75rem; }
+  .stat-card { flex-direction: row; justify-content: flex-start; text-align: left; gap: 1.25rem; padding: 1rem 1.25rem; }
+  .stat-icon { margin-bottom: 0; font-size: 1.6rem; }
   .stat-val { font-size: 1.5rem; }
-  .stat-label { margin-top: 0; }
+  .stat-label { font-size: 0.7rem; margin-top: 0.2rem; }
 
   .link-row-actions { grid-template-columns: 1fr 1fr; }
   .collect-grid { grid-template-columns: 1fr; }
-
-  .nav-btn { font-size: 0.65rem; padding: 0.5rem 0.6rem; }
-  .nav-btn span:not(.nav-icon) { display: none; } /* hide text, show only icons on tiny phones */
-
-  .auth-card { padding: 1.25rem; }
-  .brand-name { font-size: 1.5rem; }
+  
+  .nav-btn span:not(.nav-icon) { font-size: 0.55rem; }
 }
-
 
 /* ══════════════════════════════════════════════════════
    LANDSCAPE PHONE FIX
 ══════════════════════════════════════════════════════ */
 @media (max-height: 500px) and (orientation: landscape) {
-  .sidebar { padding: 0.5rem 1rem; }
-  .nav-btn { min-height: 36px; padding: 0.4rem 0.6rem; font-size: 0.65rem; }
-  .main-content { padding: 0.75rem; }
-  .page-header { margin-bottom: 0.75rem; }
-  .page-header h2 { font-size: 1.1rem; }
-  .auth-card { padding: 1rem; gap: 1rem; }
-  .brand { display: none; }
+  .sidebar {
+    position: fixed; top: 0; left: 0; width: 80px; height: 100%; bottom: auto;
+    border-top: none; border-right: 1px solid var(--cyber-border);
+  }
+  .sidebar-nav {
+    flex-direction: column; height: 100%; padding: 1rem 0;
+  }
+  .app-screen { padding-bottom: 0; padding-left: 80px; }
 }
