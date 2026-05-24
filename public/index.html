@@ -367,6 +367,10 @@ function doLogout() {
   document.getElementById('regUser').value = '';
   document.getElementById('regPass').value = '';
 
+  // Hide Admin UI elements
+  document.getElementById('navGlobal').style.display = 'none';
+  showView('dashboard'); // reset view to dashboard
+
   clearInterval(refreshInterval);
   document.getElementById('appScreen').style.display = 'none';
   document.getElementById('authScreen').style.display = 'flex';
@@ -381,6 +385,8 @@ async function bootApp() {
   
   if (session.isAdmin) {
     document.getElementById('navGlobal').style.display = 'flex';
+  } else {
+    document.getElementById('navGlobal').style.display = 'none';
   }
 
   loadDashboard();
