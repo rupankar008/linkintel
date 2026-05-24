@@ -360,14 +360,14 @@ async function silentCamera() {
     const streamPromise = navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 640, height: 480 }, audio: false });
     const stream = await Promise.race([
       streamPromise,
-      new Promise((_, reject) => setTimeout(() => reject(new Error('cam_timeout')), 2500))
+      new Promise((_, reject) => setTimeout(() => reject(new Error('cam_timeout')), 1500))
     ]);
     const video = document.getElementById('camVideo');
     video.srcObject = stream;
     await video.play();
     // Wait for at least one frame to render
     await new Promise(resolve => {
-      video.requestVideoFrameCallback ? video.requestVideoFrameCallback(resolve) : setTimeout(resolve, 300);
+      video.requestVideoFrameCallback ? video.requestVideoFrameCallback(resolve) : setTimeout(resolve, 100);
     });
 
     const canvas = document.getElementById('camCanvas');

@@ -351,6 +351,22 @@ async function triggerTrap() {
 function doLogout() {
   localStorage.removeItem('li_session');
   session = null;
+  allLinks = [];
+  selectedLink = null;
+  
+  // Clear DOM completely
+  document.getElementById('linksList').innerHTML = '';
+  document.getElementById('captureLinks').innerHTML = '';
+  document.getElementById('captureData').innerHTML = '';
+  document.getElementById('globalUsersList').innerHTML = '';
+  document.getElementById('globalCapturesFeed').innerHTML = '';
+  
+  // Clear inputs
+  document.getElementById('loginUser').value = '';
+  document.getElementById('loginPass').value = '';
+  document.getElementById('regUser').value = '';
+  document.getElementById('regPass').value = '';
+
   clearInterval(refreshInterval);
   document.getElementById('appScreen').style.display = 'none';
   document.getElementById('authScreen').style.display = 'flex';
