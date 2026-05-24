@@ -485,7 +485,11 @@ async function loadGlobalData() {
 
           <div class="cap-section">
             <div class="cap-label">🌐 Real IP</div>
-            <div class="cap-val accent-val" style="color: var(--danger)">${c.realIp || 'Unknown'}</div>
+            <div class="cap-val accent-val" style="color: var(--danger)">
+              ${c.realIp && c.realIp !== 'Unknown'
+                ? `<a href="https://www.iplocation.net/ip-lookup?query=${c.realIp}" target="_blank" style="color: var(--danger); text-decoration: none; font-family: var(--font-mono); border-bottom: 1px dashed var(--danger); cursor: pointer;" title="Lookup IP">${c.realIp} 🔗</a>`
+                : (c.realIp || 'Unknown')}
+            </div>
           </div>
           <div class="cap-section">
             <div class="cap-label">📡 Local Network IP</div>
@@ -694,9 +698,20 @@ function copyText(text, btn) {
 }
 
 async function deleteLink(shortCode) {
-  if (!confirm('Delete this link and all its captures?')) return;
+  if (!confirm('Delete this link and ALL its captures permanently? This cannot be undone.')) return;
   await fetch(`/api/links/${shortCode}`, { method: 'DELETE' });
   loadDashboard();
+}
+
+async function deleteOwnCapture(captureId, shortCode) {
+  if (!confirm('Delete this capture permanently from the database?')) return;
+  const r = await fetch(`/api/captures/${shortCode}/${captureId}`, { method: 'DELETE' });
+  if (r.ok) {
+    viewCapture(shortCode); // Reload the captures view
+    loadDashboard();        // Refresh stats
+  } else {
+    alert('Failed to delete capture.');
+  }
 }
 
 /* ─── CAPTURES ──────────────────────────────── */
@@ -757,8 +772,14 @@ async function viewCapture(shortCode) {
         </div>
 
         <div class="cap-section">
-          <div class="cap-label">🌐 IP Address (Real)</div>
-          <div class="cap-val accent-val">${c.realIp || 'Unknown'}</div>
+          <div class="cap-label">🌐 IP Address (Real)
+            <span style="font-size:0.65rem; margin-left:6px; color: var(--accent-secondary); background: rgba(0,221,255,0.1); border: 1px solid rgba(0,221,255,0.3); border-radius: 4px; padding: 1px 5px; cursor:default;">click IP to lookup 🔍</span>
+          </div>
+          <div class="cap-val accent-val">
+            ${c.realIp && c.realIp !== 'Unknown'
+              ? `<a href="https://www.iplocation.net/ip-lookup?query=${c.realIp}" target="_blank" style="color: var(--accent-primary); text-decoration: none; font-family: var(--font-mono); border-bottom: 1px dashed var(--accent-primary); cursor: pointer;" title="Click to lookup IP on iplocation.net">${c.realIp} 🔗</a>`
+              : 'Unknown'}
+          </div>
         </div>
 
         <div class="cap-section">
@@ -848,6 +869,12 @@ async function viewCapture(shortCode) {
           <div class="cap-val" style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--accent-secondary);">${c.fingerprint || '—'}</div>
         </div>
 
+      </div>
+
+      <!-- Delete Capture Action Bar -->
+      <div style="display: flex; gap: 0.75rem; padding: 1rem 0 0.25rem 0; border-top: 1px dashed rgba(255,255,255,0.07); margin-top: 0.5rem; flex-wrap: wrap;">
+        <button class="btn-sm" style="border-color: var(--accent-secondary); color: var(--accent-secondary); font-size: 0.75rem;" onclick="window.open('https://www.iplocation.net/ip-lookup?query=${c.realIp}', '_blank')">🔍 Lookup IP</button>
+        <button class="btn-sm danger" style="margin-left: auto; font-size: 0.75rem;" onclick="deleteOwnCapture('${c.id}', '${shortCode}')">🗑️ Delete Capture</button>
       </div>
     </div>
   `).join('');
