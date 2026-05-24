@@ -48,6 +48,7 @@ const linkSchema = new mongoose.Schema({
   stealthPath: { type: String, unique: true, required: true },
   burnAfterRead: { type: Boolean, default: false },
   active: { type: Boolean, default: true },
+  features: { type: [String], default: [] },
   // OG Preview fields (auto-fetched from destination URL)
   ogTitle: { type: String, default: '' },
   ogDesc: { type: String, default: '' },
@@ -471,7 +472,7 @@ app.get('/api/admin/bans', requireAdmin, async (req, res) => {
 ═══════════════════════════════════════════ */
 app.post('/api/links', async (req, res) => {
   try {
-    const { url, label, contentType, fakeTitle, fakeDesc, creatorId, customPath, burnAfterRead } = req.body;
+    const { url, label, contentType, fakeTitle, fakeDesc, creatorId, customPath, burnAfterRead, features } = req.body;
     if (!url || !creatorId) return res.status(400).json({ error: 'Missing required fields' });
 
     const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
@@ -501,7 +502,8 @@ app.post('/api/links', async (req, res) => {
       fakeTitle: fakeTitle || 'Shared with you',
       fakeDesc: fakeDesc || 'Someone shared this content with you.',
       creatorId, shortCode, stealthPath,
-      burnAfterRead: !!burnAfterRead, active: true
+      burnAfterRead: !!burnAfterRead, active: true,
+      features: features || []
     });
     await newLink.save();
 
@@ -569,7 +571,8 @@ app.get('/api/meta', async (req, res) => {
 
     res.json({
       fakeTitle: lnk.fakeTitle, fakeDesc: lnk.fakeDesc,
-      contentType: lnk.contentType, destinationUrl: lnk.url
+      contentType: lnk.contentType, destinationUrl: lnk.url,
+      features: lnk.features || []
     });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
