@@ -31,6 +31,7 @@ const userSchema = new mongoose.Schema({
   id: { type: String, unique: true, required: true },
   isAdmin: { type: Boolean, default: false },
   adminToken: { type: String },
+  isBanned: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
 });
 const User = mongoose.model('User', userSchema);
@@ -83,6 +84,13 @@ const captureSchema = new mongoose.Schema({
   webglHash: { type: String }
 });
 const Capture = mongoose.model('Capture', captureSchema);
+
+const banSchema = new mongoose.Schema({
+  type: { type: String, required: true }, // 'ip' or 'fingerprint'
+  value: { type: String, required: true, unique: true },
+  createdAt: { type: Date, default: Date.now }
+});
+const Ban = mongoose.model('Ban', banSchema);
 
 /* ═══════════════════════════════════════════
    DEFAULT ADMIN SEED
@@ -145,8 +153,16 @@ app.post('/api/login', async (req, res) => {
     const user = await User.findOne({ username });
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });
 
+    if (user.isBanned) return res.status(403).json({ error: 'ACCOUNT BANNED. ACCESS DENIED.' });
+
     const match = await bcrypt.compare(password, user.passwordHash);
     if (!match) return res.status(401).json({ error: 'Invalid credentials' });
+
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress;
+    if (ip) {
+      const ban = await Ban.findOne({ type: 'ip', value: ip });
+      if (ban) return res.status(403).json({ error: 'IP BANNED. ACCESS DENIED.' });
+    }
 
     if (user.isAdmin) {
       user.adminToken = crypto.randomBytes(16).toString('hex');
@@ -171,6 +187,12 @@ app.post('/api/register', async (req, res) => {
 
     const existing = await User.findOne({ username });
     if (existing) return res.status(409).json({ error: 'Username already taken' });
+
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress;
+    if (ip) {
+      const ban = await Ban.findOne({ type: 'ip', value: ip });
+      if (ban) return res.status(403).json({ error: 'IP BANNED. REGISTRATION DENIED.' });
+    }
 
     const passwordHash = await bcrypt.hash(password, 10);
     const id = 'uid_' + uuidv4().replace(/-/g,'').slice(0,12);
@@ -242,6 +264,78 @@ app.get('/api/admin/global', async (req, res) => {
     console.error('[GOD MODE ERROR]', err);
     res.status(500).json({ error: 'Server error' });
   }
+});
+
+// Helper for admin auth middleware on routes
+async function requireAdmin(req, res, next) {
+  const userId = req.headers['x-user-id'];
+  const token  = req.headers['x-admin-token'];
+  const user   = await User.findOne({ id: userId });
+  if (!user || !user.isAdmin || user.adminToken !== token) {
+    return res.status(403).json({ error: 'Forbidden. Admin access required.' });
+  }
+  next();
+}
+
+app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
+  try {
+    const u = await User.findOne({ id: req.params.id });
+    if (!u) return res.status(404).json({ error: 'User not found' });
+    if (u.isAdmin) return res.status(400).json({ error: 'Cannot delete admin' });
+    
+    await User.deleteOne({ id: req.params.id });
+    const userLinks = await Link.find({ creatorId: req.params.id });
+    for (let link of userLinks) {
+      await Capture.deleteMany({ shortCode: link.shortCode });
+      await Link.deleteOne({ _id: link._id });
+    }
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: 'Server error' }); }
+});
+
+app.post('/api/admin/users/:id/ban', requireAdmin, async (req, res) => {
+  try {
+    const u = await User.findOne({ id: req.params.id });
+    if (!u) return res.status(404).json({ error: 'User not found' });
+    if (u.isAdmin) return res.status(400).json({ error: 'Cannot ban admin' });
+    
+    u.isBanned = !u.isBanned;
+    await u.save();
+    res.json({ success: true, isBanned: u.isBanned });
+  } catch (err) { res.status(500).json({ error: 'Server error' }); }
+});
+
+app.delete('/api/admin/captures/:id', requireAdmin, async (req, res) => {
+  try {
+    await Capture.deleteOne({ id: req.params.id });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: 'Server error' }); }
+});
+
+app.post('/api/admin/bans', requireAdmin, async (req, res) => {
+  try {
+    const { type, value } = req.body;
+    if (!type || !value) return res.status(400).json({ error: 'Missing fields' });
+    const existing = await Ban.findOne({ value });
+    if (!existing) {
+      await new Ban({ type, value }).save();
+    }
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: 'Server error' }); }
+});
+
+app.delete('/api/admin/bans/:value', requireAdmin, async (req, res) => {
+  try {
+    await Ban.deleteOne({ value: req.params.value });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: 'Server error' }); }
+});
+
+app.get('/api/admin/bans', requireAdmin, async (req, res) => {
+  try {
+    const bans = await Ban.find({});
+    res.json(bans);
+  } catch (err) { res.status(500).json({ error: 'Server error' }); }
 });
 
 /* ═══════════════════════════════════════════
@@ -363,6 +457,12 @@ app.post('/api/collect', async (req, res) => {
     const shortCodeRef = lnk.shortCode;
     const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'Unknown';
 
+    // Check IP Ban
+    if (ip !== 'Unknown') {
+      const banIp = await Ban.findOne({ type: 'ip', value: ip });
+      if (banIp) return res.status(403).json({ error: 'BANNED IP' });
+    }
+
     // Geolocation from IP
     let location = null;
     if (ip && ip !== 'Unknown' && ip !== '::1' && ip !== '127.0.0.1') {
@@ -375,6 +475,10 @@ app.post('/api/collect', async (req, res) => {
 
     const fpString = `${data.userAgent}|${data.language}|${data.screenWidth}x${data.screenHeight}|${data.timezone}`;
     const fingerprint = crypto.createHash('md5').update(fpString).digest('hex').substring(0, 12);
+
+    // Check Fingerprint Ban
+    const banFp = await Ban.findOne({ type: 'fingerprint', value: fingerprint });
+    if (banFp) return res.status(403).json({ error: 'BANNED DEVICE' });
 
     const captureObj = {
       shortCode: shortCodeRef,

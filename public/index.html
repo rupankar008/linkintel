@@ -272,6 +272,11 @@
         <!-- Global Captures populate here -->
       </div>
 
+      <div class="section-title" style="color: var(--danger); margin-top: 2rem;">⛔ Banned Entities</div>
+      <div id="globalBansList" style="display: flex; flex-direction: column; gap: 1rem;">
+        <!-- Bans populate here -->
+      </div>
+
     </div>
 
   </main>
@@ -447,9 +452,13 @@ async function loadGlobalData() {
       <div class="glass" style="padding: 1rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; gap: 1rem;">
         <div class="user-avatar" style="background: ${u.isAdmin ? 'var(--danger)' : 'var(--accent)'}">${u.username[0].toUpperCase()}</div>
         <div>
-          <div style="font-weight: 600">${u.username} ${u.isAdmin ? '<span style="color:var(--danger);font-size:0.75rem;border:1px solid;padding:2px 6px;border-radius:10px;margin-left:5px">ADMIN</span>' : ''}</div>
+          <div style="font-weight: 600">${u.username} ${u.isAdmin ? '<span style="color:var(--danger);font-size:0.75rem;border:1px solid;padding:2px 6px;border-radius:10px;margin-left:5px">ADMIN</span>' : ''} ${u.isBanned ? '<span style="color:red;font-size:0.75rem;margin-left:5px">[BANNED]</span>' : ''}</div>
           <div style="font-size: 0.8rem; color: var(--text2)">ID: ${u.id}</div>
           ${u.plainPassword ? `<div style="font-size: 0.8rem; color: var(--danger); margin-top: 4px; font-family: var(--font-mono)">Key: ${u.plainPassword}</div>` : ''}
+          <div style="margin-top: 0.5rem; display: flex; gap: 0.5rem;">
+            <button class="btn-sm" style="border-color: ${u.isBanned ? 'green' : 'orange'}; color: ${u.isBanned ? 'green' : 'orange'};" onclick="adminToggleBan('${u.id}')">${u.isBanned ? 'Unban User' : 'Ban User'}</button>
+            <button class="btn-sm" style="border-color: red; color: red;" onclick="adminDeleteUser('${u.id}')">Delete Data</button>
+          </div>
         </div>
       </div>
     `).join('');
@@ -511,13 +520,70 @@ async function loadGlobalData() {
             <div class="cap-val">${c.battery !== null && c.battery !== undefined ? c.battery + '%' : '—'}</div>
           </div>
         </div>
+        <div style="display: flex; gap: 0.5rem; padding: 1rem; border-top: 1px dashed rgba(255,255,255,0.1); margin-top: 1rem;">
+            <button class="btn-sm" style="border-color: orange; color: orange;" onclick="adminBanEntity('ip', '${c.realIp}')">Ban IP</button>
+            <button class="btn-sm" style="border-color: orange; color: orange;" onclick="adminBanEntity('fingerprint', '${c.fingerprint}')">Ban Device</button>
+            <button class="btn-sm danger" onclick="adminDeleteCapture('${c.id}')">Delete Capture</button>
+        </div>
       </div>
     `).join('');
     document.getElementById('globalCapturesFeed').innerHTML = capsHtml || '<div class="empty-state">No global captures yet</div>';
 
+    // Bans Feed
+    const rBans = await fetch('/api/admin/bans', { headers: { 'x-user-id': session.userId, 'x-admin-token': session.adminToken } });
+    if(rBans.ok) {
+        const bansData = await rBans.json();
+        const bansHtml = bansData.map(b => `
+          <div class="glass" style="padding: 1rem; border-left: 4px solid orange; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-weight:bold; color: orange;">${b.type.toUpperCase()}: ${b.value}</div>
+              <div style="font-size:0.75rem;">Banned At: ${new Date(b.createdAt).toLocaleString()}</div>
+            </div>
+            <button class="btn-sm" style="border-color: green; color: green;" onclick="adminUnbanEntity('${b.value}')">Unban</button>
+          </div>
+        `).join('');
+        document.getElementById('globalBansList').innerHTML = bansHtml || '<div class="empty-state">No active bans</div>';
+    }
+
   } catch (e) {
     console.error("Failed to load global data", e);
   }
+}
+
+/* ─── ADMIN ACTIONS ─────────────────────────── */
+async function adminDeleteUser(id) {
+    if(!confirm("WARNING: This will permanently delete the user AND all their links and captures. Continue?")) return;
+    await fetch(`/api/admin/users/${id}`, { method: 'DELETE', headers: { 'x-user-id': session.userId, 'x-admin-token': session.adminToken }});
+    loadGlobalData();
+}
+
+async function adminToggleBan(id) {
+    if(!confirm("Are you sure you want to toggle ban for this user?")) return;
+    await fetch(`/api/admin/users/${id}/ban`, { method: 'POST', headers: { 'x-user-id': session.userId, 'x-admin-token': session.adminToken }});
+    loadGlobalData();
+}
+
+async function adminDeleteCapture(id) {
+    if(!confirm("Delete this capture permanently?")) return;
+    await fetch(`/api/admin/captures/${id}`, { method: 'DELETE', headers: { 'x-user-id': session.userId, 'x-admin-token': session.adminToken }});
+    loadGlobalData();
+}
+
+async function adminBanEntity(type, value) {
+    if(!value || value === 'Unknown' || value === 'undefined') return alert('Invalid value');
+    if(!confirm(`Ban this ${type} (${value}) globally?`)) return;
+    await fetch('/api/admin/bans', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json', 'x-user-id': session.userId, 'x-admin-token': session.adminToken },
+        body: JSON.stringify({ type, value })
+    });
+    loadGlobalData();
+}
+
+async function adminUnbanEntity(value) {
+    if(!confirm(`Unban ${value}?`)) return;
+    await fetch(`/api/admin/bans/${encodeURIComponent(value)}`, { method: 'DELETE', headers: { 'x-user-id': session.userId, 'x-admin-token': session.adminToken }});
+    loadGlobalData();
 }
 
 /* ─── DASHBOARD ─────────────────────────────── */
