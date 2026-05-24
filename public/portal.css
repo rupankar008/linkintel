@@ -344,79 +344,71 @@ h1, h2, h3, h4, .brand-name { font-family: var(--font-sans); text-transform: upp
 ══════════════════════════════════════════════════════ */
 @media (max-width: 768px) {
 
-  html, body { overflow: hidden; }
+  html, body { overflow: auto; height: auto; }
 
-  /* ─── App Layout: Stack vertically ─── */
+  /* ─── App Layout: Standard document flow on mobile ─── */
   .app-screen {
-    flex-direction: column;
-    height: 100vh;
-    height: 100dvh;
-    overflow: hidden;
+    display: block;
+    height: auto;
+    overflow: visible;
   }
 
-  /* ─── Sidebar becomes top nav bar ─── */
+  /* ─── Sidebar becomes sticky top nav bar ─── */
   .sidebar {
     width: 100%;
-    flex: none;
-    flex-direction: column;
-    padding: env(safe-area-inset-top, 1rem) 1rem 0.5rem 1rem;
+    position: sticky;
+    top: 0;
+    z-index: 999;
+    background: var(--cyber-bg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-right: none;
     border-bottom: 1px solid var(--cyber-border);
-    overflow: visible;
-    min-height: 60px;
-    background: var(--cyber-bg);
+    padding: env(safe-area-inset-top, 0.5rem) 0.5rem 0.5rem 0.5rem;
+    flex-direction: column;
+    height: auto;
+    min-height: auto;
   }
 
-  .sidebar-brand {
-    display: none; /* hide big logo on mobile */
-  }
+  .sidebar-brand { display: none; }
+  .sidebar-footer { display: none; }
+  .mobile-logout-btn { display: flex !important; }
+  .sidebar::before { content: none; }
 
   .sidebar-nav {
     display: flex;
     flex-direction: row;
     overflow-x: auto;
     gap: 0.5rem;
-    flex: none;
     width: 100%;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
-    padding-bottom: 0.25rem;
+    padding-bottom: 0;
   }
   .sidebar-nav::-webkit-scrollbar { display: none; }
 
   .nav-btn {
     padding: 0.75rem 1rem;
-    font-size: 0.8rem;
+    font-size: 0.85rem;
     gap: 0.5rem;
     white-space: nowrap;
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 48px;
     border: 1px solid var(--cyber-border);
+    border-radius: 4px;
+    background: rgba(0,0,0,0.5);
+    flex: 1 0 auto;
+    justify-content: center;
+  }
+  .nav-btn.active {
+    background: rgba(0, 255, 65, 0.2);
   }
   .nav-btn .nav-icon { font-size: 1.1rem; }
 
-  .sidebar-footer {
-    display: none; /* hide footer on mobile — save space, user sees logout in context */
-  }
-
-  .mobile-logout-btn {
-    display: flex !important; /* show mobile exit button */
-  }
-
-  /* ─── Mobile logout / user info: show small bar above nav ─── */
-  .sidebar::before {
-    content: none; /* we handle this differently */
-  }
-
   /* ─── Main content fills remaining space ─── */
   .main-content {
-    flex: 1;
+    display: block;
     padding: 1rem;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+    overflow: visible;
+    height: auto;
   }
 
   /* ─── Page Header ─── */
@@ -482,16 +474,17 @@ h1, h2, h3, h4, .brand-name { font-family: var(--font-sans); text-transform: upp
     flex-direction: column;
     height: auto;
     gap: 1rem;
+    display: flex;
   }
   .captures-sidebar {
     width: 100%;
-    max-height: 200px;
-    overflow-y: auto;
+    max-height: none;
+    overflow: visible;
     border-bottom: 1px dashed var(--cyber-border);
   }
   .cap-link-item { padding: 0.75rem; }
   .cap-link-label { font-size: 0.9rem; }
-  .captures-main { padding-right: 0; }
+  .captures-main { padding-right: 0; display: block; overflow: visible; height: auto; }
 
   /* ─── Capture Cards ─── */
   .capture-card { padding: 1rem; }
