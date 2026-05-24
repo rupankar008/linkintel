@@ -208,6 +208,20 @@ app.post('/api/register', async (req, res) => {
 });
 
 /* ═══════════════════════════════════════════
+   BAN STATUS CHECK (polled by client)
+═══════════════════════════════════════════ */
+app.get('/api/check-ban/:userId', async (req, res) => {
+  try {
+    const user = await User.findOne({ id: req.params.userId });
+    if (!user) return res.json({ banned: true }); // user deleted = force logout
+    if (user.isBanned) return res.json({ banned: true });
+    return res.json({ banned: false });
+  } catch (err) {
+    res.status(500).json({ banned: false }); // on error, don't kick
+  }
+});
+
+/* ═══════════════════════════════════════════
    DEFENSIVE TRAP (HONEY-POT)
 ═══════════════════════════════════════════ */
 app.post('/api/trap', (req, res) => {

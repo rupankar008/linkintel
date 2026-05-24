@@ -288,7 +288,8 @@ let session = JSON.parse(localStorage.getItem('li_session') || 'null');
 let allLinks = [];
 let selectedLink = null;
 let refreshInterval = null;
-const BASE = window.location.origin; // dynamic base URL — works on localhost AND Render
+let banCheckInterval = null;
+const BASE = window.location.origin;
 
 /* ─── BOOT ──────────────────────────────────── */
 window.onload = () => {
@@ -381,12 +382,18 @@ function doLogout() {
   showView('dashboard'); // reset view to dashboard
 
   clearInterval(refreshInterval);
+  clearInterval(banCheckInterval);
+  banCheckInterval = null;
   document.getElementById('appScreen').style.display = 'none';
   document.getElementById('authScreen').style.display = 'flex';
 }
 
 /* ─── APP BOOT ────────────────────────────────── */
 async function bootApp() {
+  // Remove any lingering ban notice from previous session
+  const oldNotice = document.getElementById('bannedNotice');
+  if (oldNotice) oldNotice.remove();
+
   document.getElementById('authScreen').style.display = 'none';
   document.getElementById('appScreen').style.display = 'flex';
   document.getElementById('sidebarUsername').textContent = session.username;
@@ -400,6 +407,44 @@ async function bootApp() {
 
   loadDashboard();
   refreshInterval = setInterval(loadDashboard, 8000); // auto-refresh every 8s
+
+  // ─── BAN CHECK POLLING ───
+  // Poll every 10 seconds — if admin bans this user, they get kicked instantly
+  clearInterval(banCheckInterval);
+  banCheckInterval = setInterval(async () => {
+    if (!session) return;
+    try {
+      const r = await fetch(`/api/check-ban/${session.userId}`);
+      const d = await r.json();
+      if (d.banned) {
+        clearInterval(banCheckInterval);
+        clearInterval(refreshInterval);
+        // Wipe session
+        localStorage.removeItem('li_session');
+        session = null;
+        allLinks = [];
+        // Show the auth screen with a big red banned message
+        document.getElementById('appScreen').style.display = 'none';
+        const authEl = document.getElementById('authScreen');
+        authEl.style.display = 'flex';
+        // Inject banned notice
+        const existing = document.getElementById('bannedNotice');
+        if (!existing) {
+          const notice = document.createElement('div');
+          notice.id = 'bannedNotice';
+          notice.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100%; padding: 1rem;
+            background: rgba(220,38,38,0.95); color: #fff; font-weight: 700;
+            font-size: 1rem; text-align: center; z-index: 99999;
+            border-bottom: 2px solid #ff0000; letter-spacing: 1px;
+            box-shadow: 0 0 30px rgba(255,0,0,0.5);
+          `;
+          notice.innerHTML = '⛔ YOUR ACCOUNT HAS BEEN BANNED BY ADMIN. You can only login or register.';
+          document.body.prepend(notice);
+        }
+      }
+    } catch {} // Silent fail — don't kick on network error
+  }, 10000);
 }
 
 /* ─── VIEWS ─────────────────────────────────── */
