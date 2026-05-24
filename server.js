@@ -57,41 +57,101 @@ const linkSchema = new mongoose.Schema({
 const Link = mongoose.model('Link', linkSchema);
 
 /* ═══════════════════════════════════════════
-   OG META SCRAPER
+   OG META SCRAPER — Works for ANY website
 ═══════════════════════════════════════════ */
 async function fetchOgData(url) {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    const r = await fetch(url, {
-      signal: controller.signal,
-      headers: { 'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)' }
-    });
-    clearTimeout(timeout);
-    const html = await r.text();
+  const parsed = (() => { try { return new URL(url); } catch { return null; } })();
+  if (!parsed) return { ogTitle: '', ogDesc: '', ogImage: '', ogSiteName: '' };
 
-    const get = (pattern) => {
-      const m = html.match(pattern);
-      return m ? m[1].replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim() : '';
+  const domain      = parsed.hostname.replace('www.', '');
+  const origin      = parsed.origin;
+  // Google's favicon API — ALWAYS works as a fallback image for any domain
+  const faviconFallback = `https://www.google.com/s2/favicons?sz=256&domain=${domain}`;
+
+  const tryFetch = async (targetUrl) => {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 6000);
+    try {
+      const r = await fetch(targetUrl, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+          'Accept': 'text/html,application/xhtml+xml',
+          'Accept-Language': 'en-US,en;q=0.9'
+        },
+        redirect: 'follow'
+      });
+      clearTimeout(t);
+      if (!r.ok) return null;
+      return await r.text();
+    } catch { clearTimeout(t); return null; }
+  };
+
+  const extract = (html) => {
+    if (!html) return null;
+    const get = (patterns) => {
+      for (const p of patterns) {
+        const m = html.match(p);
+        if (m && m[1]) return m[1].replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>').trim();
+      }
+      return '';
     };
 
-    const ogTitle    = get(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)/i)
-                    || get(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i)
-                    || get(/<title[^>]*>([^<]+)<\/title>/i) || '';
-    const ogDesc     = get(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)/i)
-                    || get(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["']/i)
-                    || get(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)/i) || '';
-    const ogImage    = get(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)/i)
-                    || get(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i) || '';
-    const ogSiteName = get(/<meta[^>]+property=["']og:site_name["'][^>]+content=["']([^"']+)/i)
-                    || get(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:site_name["']/i)
-                    || new URL(url).hostname.replace('www.', '') || '';
+    const ogTitle = get([
+      /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']{1,300})/i,
+      /<meta[^>]+content=["']([^"']{1,300})["'][^>]+property=["']og:title["']/i,
+      /<meta[^>]+name=["']twitter:title["'][^>]+content=["']([^"']{1,300})/i,
+      /<title[^>]*>([^<]{1,300})<\/title>/i
+    ]);
 
-    return { ogTitle, ogDesc, ogImage, ogSiteName };
-  } catch (e) {
-    console.log('[OG FETCH] Failed for', url, e.message);
-    return { ogTitle: '', ogDesc: '', ogImage: '', ogSiteName: '' };
+    const ogDesc = get([
+      /<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']{1,500})/i,
+      /<meta[^>]+content=["']([^"']{1,500})["'][^>]+property=["']og:description["']/i,
+      /<meta[^>]+name=["']description["'][^>]+content=["']([^"']{1,500})/i,
+      /<meta[^>]+content=["']([^"']{1,500})["'][^>]+name=["']description["']/i,
+      /<meta[^>]+name=["']twitter:description["'][^>]+content=["']([^"']{1,500})/i
+    ]);
+
+    const ogImage = get([
+      /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
+      /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)/i,
+      /<meta[^>]+name=["']twitter:image:src["'][^>]+content=["']([^"']+)/i
+    ]);
+
+    const ogSiteName = get([
+      /<meta[^>]+property=["']og:site_name["'][^>]+content=["']([^"']{1,100})/i,
+      /<meta[^>]+content=["']([^"']{1,100})["'][^>]+property=["']og:site_name["']/i
+    ]) || domain;
+
+    // If ogImage is a relative URL, make it absolute
+    let absImage = ogImage;
+    if (ogImage && !ogImage.startsWith('http')) {
+      absImage = ogImage.startsWith('/') ? `${origin}${ogImage}` : `${origin}/${ogImage}`;
+    }
+
+    return { ogTitle, ogDesc, ogImage: absImage, ogSiteName };
+  };
+
+  // Strategy 1: Try fetching the exact URL
+  let html = await tryFetch(url);
+  let result = extract(html);
+
+  // Strategy 2: If no OG image found, try fetching the root domain homepage
+  if (result && !result.ogImage && url !== origin + '/') {
+    const homeHtml = await tryFetch(origin + '/');
+    const homeResult = extract(homeHtml);
+    if (homeResult && homeResult.ogImage) result.ogImage = homeResult.ogImage;
   }
+
+  // Strategy 3: Always guarantee an image using Google favicon API
+  if (!result || !result.ogImage) {
+    result = result || { ogTitle: domain, ogDesc: '', ogImage: '', ogSiteName: domain };
+    result.ogImage = faviconFallback;
+  }
+
+  console.log(`[OG] ${domain} → title="${result.ogTitle?.slice(0,50)}" img="${result.ogImage?.slice(0,60)}"`);
+  return result;
 }
 
 const captureSchema = new mongoose.Schema({
